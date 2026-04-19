@@ -1,3 +1,21 @@
+---
+title: PostmortemEnv
+emoji: 🔍
+colorFrom: indigo
+colorTo: red
+sdk: docker
+app_port: 7860
+pinned: true
+license: mit
+short_description: Epistemic RL env for cloud outage root-cause investigation
+tags:
+  - openenv
+  - reinforcement-learning
+  - sre
+  - epistemic-rl
+  - root-cause-analysis
+---
+
 # PostmortemEnv
 
 > **An Epistemic Reinforcement Learning Environment for Cloud Outage Investigation**
@@ -104,7 +122,7 @@ This gap demonstrates the environment provides a meaningful training signal.
 # Install
 pip install -r requirements.txt
 
-# Run tests (76 pass)
+# Run tests (92 pass)
 python -m pytest tests/ -v
 
 # Start server
@@ -140,7 +158,7 @@ PostmortemEnv/
 |   +-- scenarios/            # 3 hand-crafted outage scenarios
 |   +-- solutions/            # Oracle optimal solutions
 |   +-- seed_generator.py     # Procedural scenario generator
-+-- tests/                    # 76 unit tests
++-- tests/                    # 92 unit tests
 +-- Dockerfile, openenv.yaml, requirements.txt
 ```
 
