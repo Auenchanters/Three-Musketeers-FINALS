@@ -1,0 +1,179 @@
+{
+  "task_id": "task3_correlated_cause",
+  "task_difficulty": "hard",
+  "task_description": "A severe outage affected all four services starting at 03:22 UTC during a maintenance window. The incident lasted 25 minutes and exhibited unusual characteristics: neither the most recent deploy NOR the concurrent infrastructure event alone can explain the failure. The root cause is a COMBINATION of a specific commit and a specific infrastructure event that interacted non-obviously. Identify BOTH contributing causes AND reconstruct the complete causal chain.",
+  "max_steps": 120,
+  "service_graph": {
+    "frontend": ["auth"],
+    "auth": ["data"],
+    "data": ["batch"],
+    "batch": []
+  },
+  "services": [
+    {"name": "frontend", "status": "down", "dependencies": ["auth"], "recent_deploy_count": 3, "error_rate_during_incident": 99.2},
+    {"name": "auth", "status": "down", "dependencies": ["data"], "recent_deploy_count": 2, "error_rate_during_incident": 97.8},
+    {"name": "data", "status": "down", "dependencies": ["batch"], "recent_deploy_count": 4, "error_rate_during_incident": 99.5},
+    {"name": "batch", "status": "degraded", "dependencies": [], "recent_deploy_count": 1, "error_rate_during_incident": 15.3}
+  ],
+  "incident_window": {
+    "start": "2026-04-16T03:15:00Z",
+    "end": "2026-04-16T03:47:00Z"
+  },
+  "logs": {
+    "frontend": [
+      {"id": "log-fe-201", "timestamp": "2026-04-16T02:00:00Z", "level": "INFO", "message": "Deployment v2.16.0 rolled out — new caching layer for API responses", "relevant": false},
+      {"id": "log-fe-202", "timestamp": "2026-04-16T03:00:00Z", "level": "INFO", "message": "Maintenance window started. Traffic shifted to secondary region.", "relevant": false},
+      {"id": "log-fe-203", "timestamp": "2026-04-16T03:22:00Z", "level": "ERROR", "message": "Auth service unreachable on primary endpoint. Attempting failover to secondary.", "relevant": true},
+      {"id": "log-fe-204", "timestamp": "2026-04-16T03:22:05Z", "level": "ERROR", "message": "Secondary auth endpoint also failing — both AZs affected", "relevant": true},
+      {"id": "log-fe-205", "timestamp": "2026-04-16T03:22:15Z", "level": "CRITICAL", "message": "Complete auth failure. All API requests returning 503.", "relevant": true},
+      {"id": "log-fe-206", "timestamp": "2026-04-16T03:23:00Z", "level": "WARN", "message": "Static page fallback activated. Dynamic content unavailable.", "relevant": false},
+      {"id": "log-fe-207", "timestamp": "2026-04-16T03:25:00Z", "level": "ERROR", "message": "DNS resolution for auth-service.internal intermittently failing", "relevant": true},
+      {"id": "log-fe-208", "timestamp": "2026-04-16T03:30:00Z", "level": "INFO", "message": "SEV-1 declared. On-call paged.", "relevant": false},
+      {"id": "log-fe-209", "timestamp": "2026-04-16T01:00:00Z", "level": "INFO", "message": "Deployment v2.15.9 rolled out — bug fix for pagination", "relevant": false},
+      {"id": "log-fe-210", "timestamp": "2026-04-15T22:00:00Z", "level": "INFO", "message": "Deployment v2.15.8 rolled out — performance monitoring improvements", "relevant": false},
+      {"id": "log-fe-211", "timestamp": "2026-04-16T03:35:00Z", "level": "WARN", "message": "Some requests succeeding through cached routes — inconsistent availability", "relevant": false},
+      {"id": "log-fe-212", "timestamp": "2026-04-16T03:40:00Z", "level": "INFO", "message": "Auth service partially recovering in AZ-b", "relevant": false}
+    ],
+    "auth": [
+      {"id": "log-auth-201", "timestamp": "2026-04-16T02:30:00Z", "level": "INFO", "message": "Deployment v1.10.0 rolled out — unified connection manager for multi-AZ failover", "relevant": true},
+      {"id": "log-auth-202", "timestamp": "2026-04-16T03:00:00Z", "level": "INFO", "message": "Maintenance window: pre-check passed. Multi-AZ failover configured.", "relevant": false},
+      {"id": "log-auth-203", "timestamp": "2026-04-16T03:20:00Z", "level": "WARN", "message": "Network latency to data-service AZ-a spiking: 450ms avg (normal: 2ms)", "relevant": true},
+      {"id": "log-auth-204", "timestamp": "2026-04-16T03:20:30Z", "level": "INFO", "message": "Connection manager initiating failover from AZ-a to AZ-b for data-service", "relevant": true},
+      {"id": "log-auth-205", "timestamp": "2026-04-16T03:21:00Z", "level": "ERROR", "message": "Failover failed: AZ-b endpoint for data-service returned ECONNREFUSED", "relevant": true},
+      {"id": "log-auth-206", "timestamp": "2026-04-16T03:21:15Z", "level": "ERROR", "message": "Connection manager bug: failover closes ALL connections before opening new ones. Now have 0 active connections.", "relevant": true},
+      {"id": "log-auth-207", "timestamp": "2026-04-16T03:21:30Z", "level": "CRITICAL", "message": "Cannot reconnect to data-service on ANY AZ. Connection manager in broken state.", "relevant": true},
+      {"id": "log-auth-208", "timestamp": "2026-04-16T03:22:00Z", "level": "CRITICAL", "message": "Auth service completely down — no data-service connectivity", "relevant": true},
+      {"id": "log-auth-209", "timestamp": "2026-04-16T03:25:00Z", "level": "ERROR", "message": "Connection manager retry loop: attempt 15 — still ECONNREFUSED on AZ-b, timeout on AZ-a", "relevant": false},
+      {"id": "log-auth-210", "timestamp": "2026-04-16T01:00:00Z", "level": "INFO", "message": "Deployment v1.9.9 rolled out — added structured logging", "relevant": false},
+      {"id": "log-auth-211", "timestamp": "2026-04-16T03:40:00Z", "level": "INFO", "message": "Manual restart of auth-service. Connection manager re-initialized.", "relevant": false},
+      {"id": "log-auth-212", "timestamp": "2026-04-16T03:42:00Z", "level": "INFO", "message": "Data-service connectivity restored via AZ-a (network maintenance completed)", "relevant": false}
+    ],
+    "data": [
+      {"id": "log-data-201", "timestamp": "2026-04-16T02:00:00Z", "level": "INFO", "message": "Deployment v3.4.0 rolled out — added AZ-b read replica support", "relevant": false},
+      {"id": "log-data-202", "timestamp": "2026-04-16T02:30:00Z", "level": "INFO", "message": "Deployment v3.4.1 rolled out — hot-patch for AZ-b endpoint registration", "relevant": true},
+      {"id": "log-data-203", "timestamp": "2026-04-16T03:00:00Z", "level": "INFO", "message": "Maintenance window started. AZ-a network maintenance scheduled.", "relevant": false},
+      {"id": "log-data-204", "timestamp": "2026-04-16T03:15:00Z", "level": "WARN", "message": "Network interface eth0 experiencing packet loss: 15% on AZ-a subnet", "relevant": true},
+      {"id": "log-data-205", "timestamp": "2026-04-16T03:18:00Z", "level": "WARN", "message": "Database primary in AZ-a responding slowly — query latency 10x normal", "relevant": true},
+      {"id": "log-data-206", "timestamp": "2026-04-16T03:20:00Z", "level": "ERROR", "message": "Connections from auth-service timing out after 5000ms", "relevant": true},
+      {"id": "log-data-207", "timestamp": "2026-04-16T03:21:00Z", "level": "ERROR", "message": "AZ-b read replica endpoint not registered in service discovery. Hot-patch v3.4.1 only registered AZ-a endpoint.", "relevant": true},
+      {"id": "log-data-208", "timestamp": "2026-04-16T03:21:30Z", "level": "CRITICAL", "message": "No healthy endpoints available: AZ-a degraded by network maintenance, AZ-b not registered", "relevant": true},
+      {"id": "log-data-209", "timestamp": "2026-04-16T03:22:00Z", "level": "CRITICAL", "message": "Service effectively down — all connection attempts failing", "relevant": true},
+      {"id": "log-data-210", "timestamp": "2026-04-16T01:00:00Z", "level": "INFO", "message": "Deployment v3.3.9 rolled out — query optimization for batch lookups", "relevant": false},
+      {"id": "log-data-211", "timestamp": "2026-04-16T02:45:00Z", "level": "INFO", "message": "Deployment v3.4.2 rolled out — increased connection timeout from 3s to 5s", "relevant": false},
+      {"id": "log-data-212", "timestamp": "2026-04-16T03:00:00Z", "level": "INFO", "message": "Deployment v3.4.3 rolled out — added health check for AZ-b endpoint", "relevant": false},
+      {"id": "log-data-213", "timestamp": "2026-04-16T03:25:00Z", "level": "WARN", "message": "Batch service reporting read latency increase but still functional", "relevant": false},
+      {"id": "log-data-214", "timestamp": "2026-04-16T03:35:00Z", "level": "INFO", "message": "AZ-a network recovering — packet loss down to 2%", "relevant": false},
+      {"id": "log-data-215", "timestamp": "2026-04-16T03:40:00Z", "level": "INFO", "message": "Manual registration of AZ-b endpoint in service discovery", "relevant": false}
+    ],
+    "batch": [
+      {"id": "log-batch-201", "timestamp": "2026-04-16T01:00:00Z", "level": "INFO", "message": "Deployment v1.1.0 rolled out — improved batch job monitoring", "relevant": false},
+      {"id": "log-batch-202", "timestamp": "2026-04-16T03:00:00Z", "level": "INFO", "message": "Batch processing nominal, 0 failed jobs", "relevant": false},
+      {"id": "log-batch-203", "timestamp": "2026-04-16T03:20:00Z", "level": "WARN", "message": "Read latency from data-service increased: 50ms -> 800ms", "relevant": false},
+      {"id": "log-batch-204", "timestamp": "2026-04-16T03:25:00Z", "level": "WARN", "message": "Some batch jobs retrying due to slow reads", "relevant": false},
+      {"id": "log-batch-205", "timestamp": "2026-04-16T03:30:00Z", "level": "INFO", "message": "Batch processing continuing with degraded performance", "relevant": false},
+      {"id": "log-batch-206", "timestamp": "2026-04-16T03:40:00Z", "level": "INFO", "message": "Read latency normalizing", "relevant": false}
+    ]
+  },
+  "traces": [
+    {"trace_id": "trace-201", "timestamp": "2026-04-16T03:21:00Z", "spans": [
+      {"service": "frontend", "operation": "GET /api/v1/dashboard", "duration_ms": 5200, "status": "ERROR", "error": "auth service unreachable"},
+      {"service": "auth", "operation": "/internal/auth/validate", "duration_ms": 5100, "status": "ERROR", "error": "data-service connection failed after failover"},
+      {"service": "data", "operation": "/internal/user/lookup", "duration_ms": 5050, "status": "ERROR", "error": "network timeout AZ-a, not registered AZ-b"}
+    ], "relevant": true},
+    {"trace_id": "trace-202", "timestamp": "2026-04-16T03:21:30Z", "spans": [
+      {"service": "auth", "operation": "/internal/auth/validate", "duration_ms": 100, "status": "ERROR", "error": "connection manager in broken state — 0 active connections"}
+    ], "relevant": true},
+    {"trace_id": "trace-203", "timestamp": "2026-04-16T03:15:00Z", "spans": [
+      {"service": "data", "operation": "/internal/user/lookup", "duration_ms": 850, "status": "SLOW"},
+      {"service": "data", "operation": "db.query", "duration_ms": 800, "status": "SLOW", "error": "high network latency to DB primary in AZ-a"}
+    ], "relevant": true},
+    {"trace_id": "trace-204", "timestamp": "2026-04-16T03:00:00Z", "spans": [
+      {"service": "frontend", "operation": "GET /api/v1/dashboard", "duration_ms": 150, "status": "OK"},
+      {"service": "auth", "operation": "/internal/auth/validate", "duration_ms": 40, "status": "OK"},
+      {"service": "data", "operation": "/internal/user/lookup", "duration_ms": 15, "status": "OK"}
+    ], "relevant": false},
+    {"trace_id": "trace-205", "timestamp": "2026-04-16T03:20:30Z", "spans": [
+      {"service": "auth", "operation": "connection_manager.failover", "duration_ms": 500, "status": "ERROR", "error": "failover procedure: closed 48 AZ-a connections, attempted AZ-b, got ECONNREFUSED, now at 0 total connections"}
+    ], "relevant": true},
+    {"trace_id": "trace-206", "timestamp": "2026-04-16T03:18:00Z", "spans": [
+      {"service": "data", "operation": "/internal/user/lookup", "duration_ms": 3200, "status": "SLOW"},
+      {"service": "data", "operation": "db.query", "duration_ms": 3100, "status": "SLOW", "error": "packet retransmission on AZ-a network"}
+    ], "relevant": true},
+    {"trace_id": "trace-207", "timestamp": "2026-04-16T02:30:00Z", "spans": [
+      {"service": "auth", "operation": "/internal/auth/validate", "duration_ms": 35, "status": "OK"},
+      {"service": "data", "operation": "/internal/user/lookup", "duration_ms": 12, "status": "OK"}
+    ], "relevant": false},
+    {"trace_id": "trace-208", "timestamp": "2026-04-16T03:22:00Z", "spans": [
+      {"service": "frontend", "operation": "POST /api/v1/login", "duration_ms": 50, "status": "ERROR", "error": "503 auth service down"},
+      {"service": "auth", "operation": "/internal/auth/login", "duration_ms": 5, "status": "ERROR", "error": "no connections available to data-service"}
+    ], "relevant": true},
+    {"trace_id": "trace-209", "timestamp": "2026-04-16T03:30:00Z", "spans": [
+      {"service": "batch", "operation": "/internal/batch/process", "duration_ms": 2500, "status": "SLOW"},
+      {"service": "data", "operation": "db.query", "duration_ms": 2400, "status": "SLOW"}
+    ], "relevant": false},
+    {"trace_id": "trace-210", "timestamp": "2026-04-16T01:00:00Z", "spans": [
+      {"service": "frontend", "operation": "GET /api/v1/dashboard", "duration_ms": 120, "status": "OK"}
+    ], "relevant": false}
+  ],
+  "commits": [
+    {"hash": "commit-auth200", "service": "auth", "timestamp": "2026-04-16T02:29:00Z", "author": "carol@company.com", "message": "feat: unified connection manager for multi-AZ failover — closes old connections before opening new ones to prevent connection leaks", "diff": "--- a/auth-service/connections/manager.go\n+++ b/auth-service/connections/manager.go\n+type ConnectionManager struct {\n+    activeConns map[string][]*Connection\n+    mu          sync.Mutex\n+}\n+\n+func (cm *ConnectionManager) Failover(fromAZ, toAZ string) error {\n+    cm.mu.Lock()\n+    defer cm.mu.Unlock()\n+    // Close ALL existing connections first to prevent leaks\n+    for az, conns := range cm.activeConns {\n+        for _, conn := range conns {\n+            conn.Close()\n+        }\n+        delete(cm.activeConns, az)\n+    }\n+    // Now open new connections to target AZ\n+    newConns, err := cm.dialAZ(toAZ)\n+    if err != nil {\n+        // BUG: if dialAZ fails, we have 0 connections and no way to recover\n+        // without a restart since we already closed all old connections\n+        return fmt.Errorf(\"failover to %s failed: %w\", toAZ, err)\n+    }\n+    cm.activeConns[toAZ] = newConns\n+    return nil\n+}", "relevant": true},
+    {"hash": "commit-data200", "service": "data", "timestamp": "2026-04-16T02:00:00Z", "author": "alice@company.com", "message": "feat: add AZ-b read replica support for improved availability", "diff": "--- a/data-service/db/replicas.go\n+++ b/data-service/db/replicas.go\n+func SetupReplica(az string) (*sql.DB, error) {\n+    return sql.Open(\"postgres\", replicaConnStr(az))\n+}", "relevant": false},
+    {"hash": "commit-data201", "service": "data", "timestamp": "2026-04-16T02:29:00Z", "author": "alice@company.com", "message": "hotfix: register AZ-b endpoint in service discovery — ONLY registers AZ-a due to typo in config template", "diff": "--- a/data-service/discovery/register.go\n+++ b/data-service/discovery/register.go\n+func RegisterEndpoints() {\n+    // Register primary AZ-a\n+    discovery.Register(\"data-service\", \"az-a\", primaryEndpoint)\n+    // TODO: Also register AZ-b — currently skipped due to config template issue\n+    // discovery.Register(\"data-service\", \"az-b\", replicaEndpoint)\n+    log.Info(\"Registered data-service endpoints\") // misleading: only AZ-a registered\n+}", "relevant": true},
+    {"hash": "commit-fe200", "service": "frontend", "timestamp": "2026-04-16T02:00:00Z", "author": "dave@company.com", "message": "feat: new API response caching layer", "diff": "--- a/frontend/src/cache/api.ts\n+export const apiCache = new CacheLayer({ttl: 300})", "relevant": false},
+    {"hash": "commit-fe201", "service": "frontend", "timestamp": "2026-04-16T01:00:00Z", "author": "dave@company.com", "message": "fix: pagination bug on search results page", "diff": "--- a/frontend/src/search/pagination.tsx\n+const offset = (page - 1) * pageSize;", "relevant": false},
+    {"hash": "commit-fe202", "service": "frontend", "timestamp": "2026-04-15T22:00:00Z", "author": "dave@company.com", "message": "chore: add performance monitoring for API calls", "diff": "--- a/frontend/src/utils/perf.ts\n+export function trackAPICall(endpoint: string, duration: number) {}", "relevant": false},
+    {"hash": "commit-auth201", "service": "auth", "timestamp": "2026-04-16T01:00:00Z", "author": "carol@company.com", "message": "chore: add structured logging with request IDs", "diff": "--- a/auth-service/logging/structured.go\n+log.WithField(\"request_id\", reqID)", "relevant": false},
+    {"hash": "commit-data202", "service": "data", "timestamp": "2026-04-16T01:00:00Z", "author": "bob@company.com", "message": "perf: optimize batch lookup queries", "diff": "--- a/data-service/queries/batch.go\n+// Added index hint for batch queries", "relevant": false},
+    {"hash": "commit-data203", "service": "data", "timestamp": "2026-04-16T02:44:00Z", "author": "alice@company.com", "message": "chore: increase connection timeout from 3s to 5s for maintenance window", "diff": "--- a/data-service/config/timeouts.go\n+ConnTimeout = 5 * time.Second", "relevant": false},
+    {"hash": "commit-batch200", "service": "batch", "timestamp": "2026-04-16T01:00:00Z", "author": "frank@company.com", "message": "feat: improved batch job monitoring and alerting", "diff": "--- a/batch-service/monitoring/alerts.go\n+func SetupAlerts() {}", "relevant": false}
+  ],
+  "config_changes": [
+    {"config_id": "cfg-201", "service": "data", "timestamp": "2026-04-16T02:25:00Z", "key": "AZ_B_REPLICA_ENABLED", "old_value": "false", "new_value": "true", "description": "Enabled AZ-b read replica (code deployment pending)", "relevant": false},
+    {"config_id": "cfg-202", "service": "auth", "timestamp": "2026-04-16T02:28:00Z", "key": "FAILOVER_ENABLED", "old_value": "false", "new_value": "true", "description": "Enabled automatic multi-AZ failover", "relevant": true},
+    {"config_id": "cfg-203", "service": "auth", "timestamp": "2026-04-16T02:28:00Z", "key": "FAILOVER_CLOSE_OLD_CONNS", "old_value": "false", "new_value": "true", "description": "Close existing connections before failover to prevent connection leaks", "relevant": true},
+    {"config_id": "cfg-204", "service": "data", "timestamp": "2026-04-16T02:28:00Z", "key": "SERVICE_DISCOVERY_AZS", "old_value": "az-a", "new_value": "az-a,az-b", "description": "Added AZ-b to service discovery config (but code only registers AZ-a)", "relevant": true},
+    {"config_id": "cfg-205", "service": "frontend", "timestamp": "2026-04-16T02:00:00Z", "key": "CACHE_TTL_SECONDS", "old_value": "60", "new_value": "300", "description": "Increased API cache TTL", "relevant": false},
+    {"config_id": "cfg-206", "service": "batch", "timestamp": "2026-04-16T01:00:00Z", "key": "MONITORING_ENABLED", "old_value": "false", "new_value": "true", "description": "Enabled enhanced monitoring", "relevant": false},
+    {"config_id": "cfg-207", "service": "data", "timestamp": "2026-04-16T01:00:00Z", "key": "QUERY_CACHE_SIZE", "old_value": "1000", "new_value": "5000", "description": "Increased query cache size", "relevant": false},
+    {"config_id": "cfg-208", "service": "auth", "timestamp": "2026-04-16T01:00:00Z", "key": "LOG_FORMAT", "old_value": "text", "new_value": "json", "description": "Switched to JSON logging", "relevant": false},
+    {"config_id": "cfg-209", "service": "frontend", "timestamp": "2026-04-16T00:00:00Z", "key": "FEATURE_FLAG_API_CACHE", "old_value": "false", "new_value": "true", "description": "Enabled API response caching", "relevant": false},
+    {"config_id": "cfg-210", "service": "data", "timestamp": "2026-04-15T23:00:00Z", "key": "MAX_REPLICAS", "old_value": "3", "new_value": "5", "description": "Increased max replicas for scaling", "relevant": false},
+    {"config_id": "cfg-211", "service": "batch", "timestamp": "2026-04-15T22:00:00Z", "key": "JOB_TIMEOUT_SECONDS", "old_value": "3600", "new_value": "7200", "description": "Doubled job timeout", "relevant": false},
+    {"config_id": "cfg-212", "service": "auth", "timestamp": "2026-04-15T21:00:00Z", "key": "MAX_CONNECTIONS_PER_AZ", "old_value": "50", "new_value": "50", "description": "Confirmed connection limit unchanged", "relevant": false},
+    {"config_id": "cfg-213", "service": "data", "timestamp": "2026-04-15T20:00:00Z", "key": "DB_POOL_SIZE", "old_value": "25", "new_value": "50", "description": "Increased DB pool size in preparation for AZ-b", "relevant": false},
+    {"config_id": "cfg-214", "service": "frontend", "timestamp": "2026-04-15T19:00:00Z", "key": "AUTH_TIMEOUT_MS", "old_value": "3000", "new_value": "5000", "description": "Increased auth timeout for maintenance window", "relevant": false},
+    {"config_id": "cfg-215", "service": "batch", "timestamp": "2026-04-15T18:00:00Z", "key": "BATCH_CONCURRENCY", "old_value": "8", "new_value": "4", "description": "Reduced batch concurrency for maintenance window", "relevant": false},
+    {"config_id": "cfg-216", "service": "data", "timestamp": "2026-04-15T17:00:00Z", "key": "MAINTENANCE_MODE", "old_value": "false", "new_value": "true", "description": "Enabled maintenance mode", "relevant": false},
+    {"config_id": "cfg-217", "service": "auth", "timestamp": "2026-04-15T16:00:00Z", "key": "GRACEFUL_SHUTDOWN_TIMEOUT", "old_value": "30", "new_value": "60", "description": "Increased shutdown timeout for maintenance", "relevant": false},
+    {"config_id": "cfg-218", "service": "frontend", "timestamp": "2026-04-15T15:00:00Z", "key": "MAINTENANCE_BANNER", "old_value": "false", "new_value": "true", "description": "Show maintenance banner to users", "relevant": false},
+    {"config_id": "cfg-219", "service": "data", "timestamp": "2026-04-15T14:00:00Z", "key": "READ_REPLICA_LAG_THRESHOLD_MS", "old_value": "100", "new_value": "500", "description": "Increased acceptable replica lag for maintenance", "relevant": false},
+    {"config_id": "cfg-220", "service": "batch", "timestamp": "2026-04-15T13:00:00Z", "key": "RETRY_MAX_ATTEMPTS", "old_value": "3", "new_value": "5", "description": "Increased retry attempts for maintenance resilience", "relevant": false}
+  ],
+  "infra_events": [
+    {"event_id": "infra-201", "timestamp": "2026-04-16T03:00:00Z", "type": "maintenance", "description": "Scheduled network maintenance on AZ-a subnet 10.0.1.0/24 started. Expected duration: 45 minutes. Gradual traffic rerouting.", "relevant": true},
+    {"event_id": "infra-202", "timestamp": "2026-04-16T03:15:00Z", "type": "network_degradation", "description": "AZ-a network degradation detected: packet loss 15%, latency spike 450ms on subnet 10.0.1.0/24. Affects data-service primary.", "relevant": true},
+    {"event_id": "infra-203", "timestamp": "2026-04-16T03:45:00Z", "type": "maintenance", "description": "Network maintenance completed. AZ-a subnet restored to normal operation.", "relevant": false},
+    {"event_id": "infra-204", "timestamp": "2026-04-15T22:00:00Z", "type": "scaling", "description": "Pre-maintenance scaling: added 2 extra pods per service for resilience.", "relevant": false},
+    {"event_id": "infra-205", "timestamp": "2026-04-16T02:00:00Z", "type": "dns_update", "description": "DNS records updated for multi-AZ endpoints. TTL set to 60s.", "relevant": false}
+  ],
+  "relevant_fact_ids": [
+    "log-auth-201", "log-auth-203", "log-auth-204", "log-auth-205", "log-auth-206", "log-auth-207", "log-auth-208",
+    "log-data-202", "log-data-204", "log-data-205", "log-data-206", "log-data-207", "log-data-208", "log-data-209",
+    "log-fe-203", "log-fe-204", "log-fe-205", "log-fe-207",
+    "cfg-202", "cfg-203", "cfg-204",
+    "commit-auth200", "commit-data201"
+  ],
+  "ground_truth": {
+    "cause": "commit-auth200+infra-202",
+    "cause_type": "correlated",
+    "contributing_causes": ["commit-auth200", "commit-data201", "infra-202"],
+    "explanation": "The auth service connection manager (commit-auth200) had a bug: on failover it closes ALL connections before opening new ones. The AZ-a network degradation (infra-202) triggered a failover attempt. The failover target AZ-b was unavailable because commit-data201 had a bug that only registered AZ-a in service discovery. Result: auth closed all AZ-a connections, couldn't open AZ-b connections, left with 0 connections and no recovery path.",
+    "chain": [
+      {"service": "data", "effect": "az_a_network_degradation"},
+      {"service": "data", "effect": "az_b_endpoint_not_registered"},
+      {"service": "auth", "effect": "failover_closes_all_connections"},
+      {"service": "auth", "effect": "zero_connections_no_recovery"},
+      {"service": "frontend", "effect": "complete_auth_failure"}
+    ]
+  }
+}

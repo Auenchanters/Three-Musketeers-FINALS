@@ -1,0 +1,890 @@
+[
+  {
+    "task_id": "seed_478163327_easy",
+    "difficulty": "easy",
+    "seed": 478163327,
+    "rewards": [
+      0.01,
+      0.01,
+      0.035,
+      0.035,
+      0.015,
+      0.015,
+      0.965
+    ],
+    "final_score": 0.965
+  },
+  {
+    "task_id": "seed_165578901_easy",
+    "difficulty": "easy",
+    "seed": 165578901,
+    "rewards": [
+      0.035,
+      0.01,
+      0.035,
+      0.035,
+      0.015,
+      0.015,
+      0.965
+    ],
+    "final_score": 0.965
+  },
+  {
+    "task_id": "seed_1754648232_easy",
+    "difficulty": "easy",
+    "seed": 1754648232,
+    "rewards": [
+      0.135,
+      0.01,
+      0.035,
+      0.035,
+      0.015,
+      0.015,
+      0.965
+    ],
+    "final_score": 0.965
+  },
+  {
+    "task_id": "seed_1167696004_easy",
+    "difficulty": "easy",
+    "seed": 1167696004,
+    "rewards": [
+      0.035,
+      0.01,
+      0.035,
+      0.035,
+      0.015,
+      0.015,
+      0.965
+    ],
+    "final_score": 0.965
+  },
+  {
+    "task_id": "seed_328063601_easy",
+    "difficulty": "easy",
+    "seed": 328063601,
+    "rewards": [
+      0.035,
+      0.01,
+      0.035,
+      0.015,
+      0.015,
+      0.97
+    ],
+    "final_score": 0.97
+  },
+  {
+    "task_id": "seed_1511168161_easy",
+    "difficulty": "easy",
+    "seed": 1511168161,
+    "rewards": [
+      0.085,
+      0.01,
+      0.035,
+      0.035,
+      0.015,
+      0.015,
+      0.965
+    ],
+    "final_score": 0.965
+  },
+  {
+    "task_id": "seed_1354862962_easy",
+    "difficulty": "easy",
+    "seed": 1354862962,
+    "rewards": [
+      0.01,
+      0.01,
+      0.035,
+      0.035,
+      0.015,
+      0.015,
+      0.965
+    ],
+    "final_score": 0.965
+  },
+  {
+    "task_id": "seed_287264509_easy",
+    "difficulty": "easy",
+    "seed": 287264509,
+    "rewards": [
+      0.135,
+      0.01,
+      0.035,
+      0.035,
+      0.015,
+      0.015,
+      0.965
+    ],
+    "final_score": 0.965
+  },
+  {
+    "task_id": "seed_2136903265_easy",
+    "difficulty": "easy",
+    "seed": 2136903265,
+    "rewards": [
+      0.135,
+      0.01,
+      0.035,
+      0.015,
+      0.015,
+      0.97
+    ],
+    "final_score": 0.97
+  },
+  {
+    "task_id": "seed_1045900815_easy",
+    "difficulty": "easy",
+    "seed": 1045900815,
+    "rewards": [
+      0.035,
+      0.01,
+      0.035,
+      0.035,
+      0.015,
+      0.015,
+      0.965
+    ],
+    "final_score": 0.965
+  },
+  {
+    "task_id": "seed_1152412589_easy",
+    "difficulty": "easy",
+    "seed": 1152412589,
+    "rewards": [
+      0.135,
+      0.01,
+      0.035,
+      0.035,
+      0.015,
+      0.015,
+      0.965
+    ],
+    "final_score": 0.965
+  },
+  {
+    "task_id": "seed_927942303_easy",
+    "difficulty": "easy",
+    "seed": 927942303,
+    "rewards": [
+      0.085,
+      0.01,
+      0.035,
+      0.015,
+      0.015,
+      0.97
+    ],
+    "final_score": 0.97
+  },
+  {
+    "task_id": "seed_590463589_easy",
+    "difficulty": "easy",
+    "seed": 590463589,
+    "rewards": [
+      0.135,
+      0.01,
+      0.035,
+      0.035,
+      0.015,
+      0.015,
+      0.965
+    ],
+    "final_score": 0.965
+  },
+  {
+    "task_id": "seed_388006705_easy",
+    "difficulty": "easy",
+    "seed": 388006705,
+    "rewards": [
+      0.035,
+      0.01,
+      0.035,
+      0.035,
+      0.015,
+      0.015,
+      0.965
+    ],
+    "final_score": 0.965
+  },
+  {
+    "task_id": "seed_49376573_easy",
+    "difficulty": "easy",
+    "seed": 49376573,
+    "rewards": [
+      0.085,
+      0.01,
+      0.035,
+      0.015,
+      0.015,
+      0.97
+    ],
+    "final_score": 0.97
+  },
+  {
+    "task_id": "seed_182818357_easy",
+    "difficulty": "easy",
+    "seed": 182818357,
+    "rewards": [
+      0.085,
+      0.01,
+      0.035,
+      0.035,
+      0.015,
+      0.015,
+      0.965
+    ],
+    "final_score": 0.965
+  },
+  {
+    "task_id": "seed_846782629_easy",
+    "difficulty": "easy",
+    "seed": 846782629,
+    "rewards": [
+      0.035,
+      0.01,
+      0.035,
+      0.035,
+      0.015,
+      0.015,
+      0.965
+    ],
+    "final_score": 0.965
+  },
+  {
+    "task_id": "seed_962869285_easy",
+    "difficulty": "easy",
+    "seed": 962869285,
+    "rewards": [
+      0.01,
+      0.01,
+      0.035,
+      0.015,
+      0.015,
+      0.97
+    ],
+    "final_score": 0.97
+  },
+  {
+    "task_id": "seed_1322019967_easy",
+    "difficulty": "easy",
+    "seed": 1322019967,
+    "rewards": [
+      0.135,
+      0.01,
+      0.035,
+      0.035,
+      0.015,
+      0.015,
+      0.965
+    ],
+    "final_score": 0.965
+  },
+  {
+    "task_id": "seed_2123807367_easy",
+    "difficulty": "easy",
+    "seed": 2123807367,
+    "rewards": [
+      0.085,
+      0.01,
+      0.035,
+      0.015,
+      0.015,
+      0.97
+    ],
+    "final_score": 0.97
+  },
+  {
+    "task_id": "seed_478163327_medium",
+    "difficulty": "medium",
+    "seed": 478163327,
+    "rewards": [
+      0.085,
+      0.01,
+      0.035,
+      0.035,
+      0.015,
+      0.015,
+      0.9813
+    ],
+    "final_score": 0.9813
+  },
+  {
+    "task_id": "seed_165578901_medium",
+    "difficulty": "medium",
+    "seed": 165578901,
+    "rewards": [
+      0.185,
+      0.01,
+      0.035,
+      0.035,
+      0.015,
+      0.015,
+      0.9813
+    ],
+    "final_score": 0.9813
+  },
+  {
+    "task_id": "seed_1754648232_medium",
+    "difficulty": "medium",
+    "seed": 1754648232,
+    "rewards": [
+      0.135,
+      0.01,
+      0.035,
+      0.035,
+      0.015,
+      0.015,
+      0.9813
+    ],
+    "final_score": 0.9813
+  },
+  {
+    "task_id": "seed_1167696004_medium",
+    "difficulty": "medium",
+    "seed": 1167696004,
+    "rewards": [
+      0.085,
+      0.01,
+      0.035,
+      0.035,
+      0.015,
+      0.015,
+      0.9813
+    ],
+    "final_score": 0.9813
+  },
+  {
+    "task_id": "seed_328063601_medium",
+    "difficulty": "medium",
+    "seed": 328063601,
+    "rewards": [
+      0.135,
+      0.01,
+      0.035,
+      0.035,
+      0.015,
+      0.015,
+      0.9813
+    ],
+    "final_score": 0.9813
+  },
+  {
+    "task_id": "seed_1511168161_medium",
+    "difficulty": "medium",
+    "seed": 1511168161,
+    "rewards": [
+      0.185,
+      0.01,
+      0.035,
+      0.035,
+      0.015,
+      0.015,
+      0.9813
+    ],
+    "final_score": 0.9813
+  },
+  {
+    "task_id": "seed_1354862962_medium",
+    "difficulty": "medium",
+    "seed": 1354862962,
+    "rewards": [
+      0.085,
+      0.01,
+      0.035,
+      0.035,
+      0.015,
+      0.015,
+      0.9813
+    ],
+    "final_score": 0.9813
+  },
+  {
+    "task_id": "seed_287264509_medium",
+    "difficulty": "medium",
+    "seed": 287264509,
+    "rewards": [
+      0.085,
+      0.01,
+      0.035,
+      0.035,
+      0.015,
+      0.015,
+      0.9813
+    ],
+    "final_score": 0.9813
+  },
+  {
+    "task_id": "seed_2136903265_medium",
+    "difficulty": "medium",
+    "seed": 2136903265,
+    "rewards": [
+      0.135,
+      0.01,
+      0.035,
+      0.035,
+      0.015,
+      0.015,
+      0.9813
+    ],
+    "final_score": 0.9813
+  },
+  {
+    "task_id": "seed_1045900815_medium",
+    "difficulty": "medium",
+    "seed": 1045900815,
+    "rewards": [
+      0.235,
+      0.01,
+      0.035,
+      0.035,
+      0.015,
+      0.015,
+      0.9813
+    ],
+    "final_score": 0.9813
+  },
+  {
+    "task_id": "seed_1152412589_medium",
+    "difficulty": "medium",
+    "seed": 1152412589,
+    "rewards": [
+      0.135,
+      0.01,
+      0.035,
+      0.035,
+      0.015,
+      0.015,
+      0.9813
+    ],
+    "final_score": 0.9813
+  },
+  {
+    "task_id": "seed_927942303_medium",
+    "difficulty": "medium",
+    "seed": 927942303,
+    "rewards": [
+      0.085,
+      0.01,
+      0.035,
+      0.035,
+      0.015,
+      0.015,
+      0.9813
+    ],
+    "final_score": 0.9813
+  },
+  {
+    "task_id": "seed_590463589_medium",
+    "difficulty": "medium",
+    "seed": 590463589,
+    "rewards": [
+      0.135,
+      0.01,
+      0.035,
+      0.035,
+      0.015,
+      0.015,
+      0.9813
+    ],
+    "final_score": 0.9813
+  },
+  {
+    "task_id": "seed_388006705_medium",
+    "difficulty": "medium",
+    "seed": 388006705,
+    "rewards": [
+      0.135,
+      0.01,
+      0.035,
+      0.035,
+      0.015,
+      0.015,
+      0.9813
+    ],
+    "final_score": 0.9813
+  },
+  {
+    "task_id": "seed_49376573_medium",
+    "difficulty": "medium",
+    "seed": 49376573,
+    "rewards": [
+      0.185,
+      0.01,
+      0.035,
+      0.035,
+      0.015,
+      0.015,
+      0.9813
+    ],
+    "final_score": 0.9813
+  },
+  {
+    "task_id": "seed_182818357_medium",
+    "difficulty": "medium",
+    "seed": 182818357,
+    "rewards": [
+      0.285,
+      0.01,
+      0.035,
+      0.035,
+      0.015,
+      0.015,
+      0.9813
+    ],
+    "final_score": 0.9813
+  },
+  {
+    "task_id": "seed_846782629_medium",
+    "difficulty": "medium",
+    "seed": 846782629,
+    "rewards": [
+      0.285,
+      0.01,
+      0.035,
+      0.035,
+      0.015,
+      0.015,
+      0.9813
+    ],
+    "final_score": 0.9813
+  },
+  {
+    "task_id": "seed_962869285_medium",
+    "difficulty": "medium",
+    "seed": 962869285,
+    "rewards": [
+      0.135,
+      0.01,
+      0.035,
+      0.035,
+      0.015,
+      0.015,
+      0.9813
+    ],
+    "final_score": 0.9813
+  },
+  {
+    "task_id": "seed_1322019967_medium",
+    "difficulty": "medium",
+    "seed": 1322019967,
+    "rewards": [
+      0.135,
+      0.01,
+      0.035,
+      0.035,
+      0.015,
+      0.015,
+      0.9813
+    ],
+    "final_score": 0.9813
+  },
+  {
+    "task_id": "seed_2123807367_medium",
+    "difficulty": "medium",
+    "seed": 2123807367,
+    "rewards": [
+      0.235,
+      0.01,
+      0.035,
+      0.035,
+      0.015,
+      0.015,
+      0.9813
+    ],
+    "final_score": 0.9813
+  },
+  {
+    "task_id": "seed_478163327_hard",
+    "difficulty": "hard",
+    "seed": 478163327,
+    "rewards": [
+      0.285,
+      0.01,
+      0.035,
+      0.035,
+      0.015,
+      0.015,
+      0.9883
+    ],
+    "final_score": 0.9883
+  },
+  {
+    "task_id": "seed_165578901_hard",
+    "difficulty": "hard",
+    "seed": 165578901,
+    "rewards": [
+      0.185,
+      0.01,
+      0.035,
+      0.035,
+      0.015,
+      0.015,
+      0.9883
+    ],
+    "final_score": 0.9883
+  },
+  {
+    "task_id": "seed_1754648232_hard",
+    "difficulty": "hard",
+    "seed": 1754648232,
+    "rewards": [
+      0.135,
+      0.01,
+      0.035,
+      0.035,
+      0.015,
+      0.015,
+      0.9883
+    ],
+    "final_score": 0.9883
+  },
+  {
+    "task_id": "seed_1167696004_hard",
+    "difficulty": "hard",
+    "seed": 1167696004,
+    "rewards": [
+      0.235,
+      0.01,
+      0.035,
+      0.035,
+      0.015,
+      0.015,
+      0.9883
+    ],
+    "final_score": 0.9883
+  },
+  {
+    "task_id": "seed_328063601_hard",
+    "difficulty": "hard",
+    "seed": 328063601,
+    "rewards": [
+      0.285,
+      0.01,
+      0.035,
+      0.015,
+      0.015,
+      0.99
+    ],
+    "final_score": 0.99
+  },
+  {
+    "task_id": "seed_1511168161_hard",
+    "difficulty": "hard",
+    "seed": 1511168161,
+    "rewards": [
+      0.185,
+      0.01,
+      0.035,
+      0.035,
+      0.015,
+      0.015,
+      0.9883
+    ],
+    "final_score": 0.9883
+  },
+  {
+    "task_id": "seed_1354862962_hard",
+    "difficulty": "hard",
+    "seed": 1354862962,
+    "rewards": [
+      0.285,
+      0.01,
+      0.035,
+      0.035,
+      0.015,
+      0.015,
+      0.9883
+    ],
+    "final_score": 0.9883
+  },
+  {
+    "task_id": "seed_287264509_hard",
+    "difficulty": "hard",
+    "seed": 287264509,
+    "rewards": [
+      0.335,
+      0.01,
+      0.035,
+      0.035,
+      0.015,
+      0.015,
+      0.9883
+    ],
+    "final_score": 0.9883
+  },
+  {
+    "task_id": "seed_2136903265_hard",
+    "difficulty": "hard",
+    "seed": 2136903265,
+    "rewards": [
+      0.435,
+      0.01,
+      0.035,
+      0.015,
+      0.015,
+      0.99
+    ],
+    "final_score": 0.99
+  },
+  {
+    "task_id": "seed_1045900815_hard",
+    "difficulty": "hard",
+    "seed": 1045900815,
+    "rewards": [
+      0.235,
+      0.01,
+      0.035,
+      0.035,
+      0.015,
+      0.015,
+      0.9883
+    ],
+    "final_score": 0.9883
+  },
+  {
+    "task_id": "seed_1152412589_hard",
+    "difficulty": "hard",
+    "seed": 1152412589,
+    "rewards": [
+      0.235,
+      0.01,
+      0.035,
+      0.035,
+      0.015,
+      0.015,
+      0.9883
+    ],
+    "final_score": 0.9883
+  },
+  {
+    "task_id": "seed_927942303_hard",
+    "difficulty": "hard",
+    "seed": 927942303,
+    "rewards": [
+      0.235,
+      0.01,
+      0.035,
+      0.015,
+      0.015,
+      0.99
+    ],
+    "final_score": 0.99
+  },
+  {
+    "task_id": "seed_590463589_hard",
+    "difficulty": "hard",
+    "seed": 590463589,
+    "rewards": [
+      0.385,
+      0.01,
+      0.035,
+      0.035,
+      0.015,
+      0.015,
+      0.9883
+    ],
+    "final_score": 0.9883
+  },
+  {
+    "task_id": "seed_388006705_hard",
+    "difficulty": "hard",
+    "seed": 388006705,
+    "rewards": [
+      0.385,
+      0.01,
+      0.035,
+      0.035,
+      0.015,
+      0.015,
+      0.9883
+    ],
+    "final_score": 0.9883
+  },
+  {
+    "task_id": "seed_49376573_hard",
+    "difficulty": "hard",
+    "seed": 49376573,
+    "rewards": [
+      0.335,
+      0.01,
+      0.035,
+      0.015,
+      0.015,
+      0.99
+    ],
+    "final_score": 0.99
+  },
+  {
+    "task_id": "seed_182818357_hard",
+    "difficulty": "hard",
+    "seed": 182818357,
+    "rewards": [
+      0.235,
+      0.01,
+      0.035,
+      0.035,
+      0.015,
+      0.015,
+      0.9883
+    ],
+    "final_score": 0.9883
+  },
+  {
+    "task_id": "seed_846782629_hard",
+    "difficulty": "hard",
+    "seed": 846782629,
+    "rewards": [
+      0.085,
+      0.01,
+      0.035,
+      0.035,
+      0.015,
+      0.015,
+      0.9883
+    ],
+    "final_score": 0.9883
+  },
+  {
+    "task_id": "seed_962869285_hard",
+    "difficulty": "hard",
+    "seed": 962869285,
+    "rewards": [
+      0.385,
+      0.01,
+      0.035,
+      0.015,
+      0.015,
+      0.99
+    ],
+    "final_score": 0.99
+  },
+  {
+    "task_id": "seed_1322019967_hard",
+    "difficulty": "hard",
+    "seed": 1322019967,
+    "rewards": [
+      0.135,
+      0.01,
+      0.035,
+      0.035,
+      0.015,
+      0.015,
+      0.9883
+    ],
+    "final_score": 0.9883
+  },
+  {
+    "task_id": "seed_2123807367_hard",
+    "difficulty": "hard",
+    "seed": 2123807367,
+    "rewards": [
+      0.235,
+      0.01,
+      0.035,
+      0.015,
+      0.015,
+      0.99
+    ],
+    "final_score": 0.99
+  }
+]

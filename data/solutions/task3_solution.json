@@ -1,0 +1,44 @@
+{
+  "task_id": "task3_correlated_cause",
+  "optimal_savings_score": 0.99,
+  "ground_truth": {
+    "cause": "commit-auth200+infra-202",
+    "cause_type": "correlated",
+    "contributing_causes": ["commit-auth200", "commit-data201", "infra-202"],
+    "chain": [
+      {"service": "data", "effect": "az_a_network_degradation"},
+      {"service": "data", "effect": "az_b_endpoint_not_registered"},
+      {"service": "auth", "effect": "failover_closes_all_connections"},
+      {"service": "auth", "effect": "zero_connections_no_recovery"},
+      {"service": "frontend", "effect": "complete_auth_failure"}
+    ]
+  },
+  "optimal_action_sequence": [
+    {"action_type": "query_logs", "service": "data", "keyword": "error", "reason": "Data service has 99.5% error rate — start investigation there"},
+    {"action_type": "query_logs", "service": "data", "keyword": "AZ", "reason": "Check for AZ-related issues during maintenance window"},
+    {"action_type": "query_logs", "service": "auth", "keyword": "failover", "reason": "Check auth service failover behavior"},
+    {"action_type": "query_logs", "service": "auth", "keyword": "connection", "reason": "Check connection state after failover"},
+    {"action_type": "diff_commit", "commit_hash": "commit-auth200", "reason": "Auth connection manager deploy just before incident"},
+    {"action_type": "diff_commit", "commit_hash": "commit-data201", "reason": "Data service endpoint registration deploy"},
+    {"action_type": "fetch_trace", "trace_id": "trace-205", "reason": "Failover trace showing the connection manager bug"},
+    {"action_type": "fetch_trace", "trace_id": "trace-201", "reason": "Full cascade trace during outage"},
+    {"action_type": "inspect_config", "config_id": "cfg-202", "reason": "Check failover enablement config"},
+    {"action_type": "inspect_config", "config_id": "cfg-204", "reason": "Check service discovery AZ config"},
+    {"action_type": "query_logs", "service": "data", "keyword": "registered", "reason": "Verify AZ-b was not registered"},
+    {"action_type": "hypothesize", "cause_entity_id": "commit-auth200+infra-202", "reason": "Connection manager bug + AZ-a degradation together caused the outage"},
+    {"action_type": "explain_chain", "chain": [
+      {"service": "data", "effect": "az_a_network_degradation"},
+      {"service": "data", "effect": "az_b_endpoint_not_registered"},
+      {"service": "auth", "effect": "failover_closes_all_connections"},
+      {"service": "auth", "effect": "zero_connections_no_recovery"},
+      {"service": "frontend", "effect": "complete_auth_failure"}
+    ], "reason": "AZ-a degraded, AZ-b not registered, failover killed all connections"},
+    {"action_type": "submit", "final_cause": "commit-auth200+infra-202", "final_chain": [
+      {"service": "data", "effect": "az_a_network_degradation"},
+      {"service": "data", "effect": "az_b_endpoint_not_registered"},
+      {"service": "auth", "effect": "failover_closes_all_connections"},
+      {"service": "auth", "effect": "zero_connections_no_recovery"},
+      {"service": "frontend", "effect": "complete_auth_failure"}
+    ], "reason": "Correlated: auth connection manager bug closed all conns during failover, AZ-b unavailable due to discovery bug, AZ-a degraded by maintenance"}
+  ]
+}

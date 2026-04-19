@@ -1,0 +1,37 @@
+{
+  "task_id": "task2_cascade_chain",
+  "optimal_savings_score": 0.99,
+  "ground_truth": {
+    "cause": "commit-bat100",
+    "cause_type": "commit",
+    "chain": [
+      {"service": "batch", "effect": "oom_crash_loop"},
+      {"service": "data", "effect": "batch_dependency_timeout"},
+      {"service": "auth", "effect": "permissions_lookup_failure"},
+      {"service": "frontend", "effect": "complete_service_unavailability"}
+    ]
+  },
+  "optimal_action_sequence": [
+    {"action_type": "query_logs", "service": "batch", "keyword": "error", "reason": "Batch has highest error rate — start there"},
+    {"action_type": "query_logs", "service": "batch", "keyword": "deploy", "reason": "Check recent deploys on batch"},
+    {"action_type": "diff_commit", "commit_hash": "commit-bat100", "reason": "Most recent batch deploy before incident"},
+    {"action_type": "query_logs", "service": "batch", "keyword": "OOM", "reason": "Commit loads all users into memory — check for OOM"},
+    {"action_type": "fetch_trace", "trace_id": "trace-107", "reason": "Trace showing batch OOM during permissions computation"},
+    {"action_type": "query_logs", "service": "data", "keyword": "batch", "reason": "Check how data service was impacted by batch failure"},
+    {"action_type": "fetch_trace", "trace_id": "trace-101", "reason": "Full cascade trace showing all 4 services"},
+    {"action_type": "query_logs", "service": "auth", "keyword": "permissions", "reason": "Verify auth was blocked on permissions from data"},
+    {"action_type": "hypothesize", "cause_entity_id": "commit-bat100", "reason": "Permissions pre-computation OOMs batch service"},
+    {"action_type": "explain_chain", "chain": [
+      {"service": "batch", "effect": "oom_crash_loop"},
+      {"service": "data", "effect": "batch_dependency_timeout"},
+      {"service": "auth", "effect": "permissions_lookup_failure"},
+      {"service": "frontend", "effect": "complete_service_unavailability"}
+    ], "reason": "Batch OOM cascades through dependency chain"},
+    {"action_type": "submit", "final_cause": "commit-bat100", "final_chain": [
+      {"service": "batch", "effect": "oom_crash_loop"},
+      {"service": "data", "effect": "batch_dependency_timeout"},
+      {"service": "auth", "effect": "permissions_lookup_failure"},
+      {"service": "frontend", "effect": "complete_service_unavailability"}
+    ], "reason": "Confirmed: unbounded permissions pre-computation in commit-bat100 causes OOM crash loop"}
+  ]
+}

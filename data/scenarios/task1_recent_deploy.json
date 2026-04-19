@@ -1,0 +1,174 @@
+{
+  "task_id": "task1_recent_deploy",
+  "task_difficulty": "easy",
+  "task_description": "The 'data' service experienced a sudden spike in 5xx errors at 14:03 UTC, lasting approximately 9 minutes. All four services in the stack (frontend -> auth -> data -> batch) are potentially affected. A total of 10 commits were deployed across services in the last 24 hours. Your job: identify the specific root cause (a commit, config change, or infra event) and submit your answer.",
+  "max_steps": 40,
+  "service_graph": {
+    "frontend": ["auth"],
+    "auth": ["data"],
+    "data": ["batch"],
+    "batch": []
+  },
+  "services": [
+    {"name": "frontend", "status": "degraded", "dependencies": ["auth"], "recent_deploy_count": 2, "error_rate_during_incident": 12.5},
+    {"name": "auth", "status": "degraded", "dependencies": ["data"], "recent_deploy_count": 3, "error_rate_during_incident": 8.1},
+    {"name": "data", "status": "down", "dependencies": ["batch"], "recent_deploy_count": 3, "error_rate_during_incident": 94.7},
+    {"name": "batch", "status": "healthy", "dependencies": [], "recent_deploy_count": 2, "error_rate_during_incident": 0.3}
+  ],
+  "incident_window": {
+    "start": "2026-04-18T14:00:00Z",
+    "end": "2026-04-18T14:12:00Z"
+  },
+  "logs": {
+    "frontend": [
+      {"id": "log-fe-001", "timestamp": "2026-04-18T13:45:12Z", "level": "INFO", "message": "Deployment v2.14.0 rolled out successfully", "relevant": false},
+      {"id": "log-fe-002", "timestamp": "2026-04-18T13:50:22Z", "level": "INFO", "message": "Health check passed, all endpoints responding", "relevant": false},
+      {"id": "log-fe-003", "timestamp": "2026-04-18T14:03:15Z", "level": "ERROR", "message": "Upstream auth service returned 504 Gateway Timeout for /api/v1/user/profile", "relevant": true},
+      {"id": "log-fe-004", "timestamp": "2026-04-18T14:03:18Z", "level": "ERROR", "message": "Circuit breaker OPEN for auth-service after 5 consecutive failures", "relevant": true},
+      {"id": "log-fe-005", "timestamp": "2026-04-18T14:03:22Z", "level": "WARN", "message": "Fallback cache serving stale user data for /api/v1/user/profile", "relevant": false},
+      {"id": "log-fe-006", "timestamp": "2026-04-18T14:04:01Z", "level": "ERROR", "message": "HTTP 503 returned to client, request_id=req-881a", "relevant": false},
+      {"id": "log-fe-007", "timestamp": "2026-04-18T14:04:15Z", "level": "ERROR", "message": "Upstream auth service returned 504 Gateway Timeout for /api/v1/auth/validate", "relevant": false},
+      {"id": "log-fe-008", "timestamp": "2026-04-18T14:05:30Z", "level": "INFO", "message": "Request rate dropped 40% — users experiencing errors", "relevant": false},
+      {"id": "log-fe-009", "timestamp": "2026-04-18T14:06:00Z", "level": "WARN", "message": "Response latency p99 = 12400ms (threshold: 2000ms)", "relevant": false},
+      {"id": "log-fe-010", "timestamp": "2026-04-18T14:08:00Z", "level": "INFO", "message": "PagerDuty alert fired: frontend-high-error-rate", "relevant": false},
+      {"id": "log-fe-011", "timestamp": "2026-04-18T13:30:00Z", "level": "INFO", "message": "Scheduled deployment v2.13.9 completed — CSS bundle optimization", "relevant": false},
+      {"id": "log-fe-012", "timestamp": "2026-04-18T12:15:00Z", "level": "INFO", "message": "Cache warmer ran successfully, 2048 keys refreshed", "relevant": false}
+    ],
+    "auth": [
+      {"id": "log-auth-001", "timestamp": "2026-04-18T13:30:05Z", "level": "INFO", "message": "Deployment v1.8.2 rolled out — added rate limiting headers", "relevant": false},
+      {"id": "log-auth-002", "timestamp": "2026-04-18T13:55:10Z", "level": "INFO", "message": "Deployment v1.8.3 rolled out — updated JWT validation logic", "relevant": false},
+      {"id": "log-auth-003", "timestamp": "2026-04-18T14:03:05Z", "level": "ERROR", "message": "Connection to data-service timed out after 5000ms on /internal/user/lookup", "relevant": true},
+      {"id": "log-auth-004", "timestamp": "2026-04-18T14:03:08Z", "level": "ERROR", "message": "Retry 1/3 failed for data-service /internal/user/lookup", "relevant": true},
+      {"id": "log-auth-005", "timestamp": "2026-04-18T14:03:12Z", "level": "ERROR", "message": "All retries exhausted for data-service. Returning 504 upstream.", "relevant": true},
+      {"id": "log-auth-006", "timestamp": "2026-04-18T14:03:30Z", "level": "WARN", "message": "Error rate crossed 5% threshold — entering degraded mode", "relevant": false},
+      {"id": "log-auth-007", "timestamp": "2026-04-18T14:04:00Z", "level": "ERROR", "message": "Connection pool to data-service exhausted (max=50, active=50, pending=128)", "relevant": true},
+      {"id": "log-auth-008", "timestamp": "2026-04-18T14:05:00Z", "level": "INFO", "message": "Deployment v1.8.4 rolled out — hotfix for token expiry edge case", "relevant": false},
+      {"id": "log-auth-009", "timestamp": "2026-04-18T13:00:00Z", "level": "INFO", "message": "Health check passed, all endpoints responding", "relevant": false},
+      {"id": "log-auth-010", "timestamp": "2026-04-18T12:00:00Z", "level": "INFO", "message": "Daily key rotation completed successfully", "relevant": false}
+    ],
+    "data": [
+      {"id": "log-data-001", "timestamp": "2026-04-18T13:58:00Z", "level": "INFO", "message": "Deployment v3.2.0 rolled out — migration to new connection pooling library", "relevant": true},
+      {"id": "log-data-002", "timestamp": "2026-04-18T13:58:30Z", "level": "INFO", "message": "New connection pool initialized: max_size=20, min_idle=5, timeout=30s", "relevant": true},
+      {"id": "log-data-003", "timestamp": "2026-04-18T14:01:00Z", "level": "WARN", "message": "Connection pool utilization at 85% (17/20) — approaching limit", "relevant": true},
+      {"id": "log-data-004", "timestamp": "2026-04-18T14:02:30Z", "level": "WARN", "message": "Connection pool utilization at 100% (20/20) — requests queuing", "relevant": true},
+      {"id": "log-data-005", "timestamp": "2026-04-18T14:03:00Z", "level": "ERROR", "message": "ConnectionPoolExhaustedError: No available connections. Queue depth: 45. Pool max_size=20 (was 100 in v3.1.x)", "relevant": true},
+      {"id": "log-data-006", "timestamp": "2026-04-18T14:03:01Z", "level": "ERROR", "message": "Query execution failed: SELECT * FROM users WHERE id=$1 — no connection available", "relevant": true},
+      {"id": "log-data-007", "timestamp": "2026-04-18T14:03:05Z", "level": "ERROR", "message": "ConnectionPoolExhaustedError: rejected 12 requests in last second", "relevant": true},
+      {"id": "log-data-008", "timestamp": "2026-04-18T14:03:10Z", "level": "CRITICAL", "message": "Service health check FAILED — cannot acquire DB connection within 5s", "relevant": true},
+      {"id": "log-data-009", "timestamp": "2026-04-18T14:04:00Z", "level": "ERROR", "message": "Cascading: batch-service reporting stale data reads", "relevant": false},
+      {"id": "log-data-010", "timestamp": "2026-04-18T14:05:00Z", "level": "INFO", "message": "Auto-scaling triggered: adding 2 replicas", "relevant": false},
+      {"id": "log-data-011", "timestamp": "2026-04-18T13:00:00Z", "level": "INFO", "message": "Deployment v3.1.9 rolled out — added query cache for user lookups", "relevant": false},
+      {"id": "log-data-012", "timestamp": "2026-04-18T12:30:00Z", "level": "INFO", "message": "Database vacuum completed on users table", "relevant": false},
+      {"id": "log-data-013", "timestamp": "2026-04-18T11:00:00Z", "level": "INFO", "message": "Deployment v3.1.8 rolled out — logging improvements", "relevant": false},
+      {"id": "log-data-014", "timestamp": "2026-04-18T14:06:00Z", "level": "WARN", "message": "Memory usage at 78% — GC pressure increasing", "relevant": false},
+      {"id": "log-data-015", "timestamp": "2026-04-18T14:07:00Z", "level": "INFO", "message": "New replicas healthy, load redistributing", "relevant": false}
+    ],
+    "batch": [
+      {"id": "log-batch-001", "timestamp": "2026-04-18T13:00:00Z", "level": "INFO", "message": "Batch job 'daily-aggregation' started", "relevant": false},
+      {"id": "log-batch-002", "timestamp": "2026-04-18T13:45:00Z", "level": "INFO", "message": "Deployment v0.9.1 rolled out — improved retry logic for failed jobs", "relevant": false},
+      {"id": "log-batch-003", "timestamp": "2026-04-18T14:00:00Z", "level": "INFO", "message": "Batch job 'daily-aggregation' completed successfully in 3600s", "relevant": false},
+      {"id": "log-batch-004", "timestamp": "2026-04-18T14:04:30Z", "level": "WARN", "message": "Read replica lag increased to 2.3s — batch queries may return stale data", "relevant": false},
+      {"id": "log-batch-005", "timestamp": "2026-04-18T12:00:00Z", "level": "INFO", "message": "Deployment v0.9.0 rolled out — new report generation pipeline", "relevant": false},
+      {"id": "log-batch-006", "timestamp": "2026-04-18T14:05:00Z", "level": "INFO", "message": "Health check passed", "relevant": false}
+    ]
+  },
+  "traces": [
+    {"trace_id": "trace-001", "timestamp": "2026-04-18T14:03:02Z", "spans": [
+      {"service": "frontend", "operation": "GET /api/v1/user/profile", "duration_ms": 5023, "status": "ERROR", "error": "504 Gateway Timeout"},
+      {"service": "auth", "operation": "/internal/auth/validate", "duration_ms": 5010, "status": "ERROR", "error": "upstream timeout"},
+      {"service": "data", "operation": "/internal/user/lookup", "duration_ms": 5001, "status": "ERROR", "error": "ConnectionPoolExhaustedError"}
+    ], "relevant": true},
+    {"trace_id": "trace-002", "timestamp": "2026-04-18T14:03:05Z", "spans": [
+      {"service": "frontend", "operation": "POST /api/v1/login", "duration_ms": 5050, "status": "ERROR", "error": "504 Gateway Timeout"},
+      {"service": "auth", "operation": "/internal/auth/login", "duration_ms": 5030, "status": "ERROR", "error": "upstream timeout"},
+      {"service": "data", "operation": "/internal/user/authenticate", "duration_ms": 5005, "status": "ERROR", "error": "ConnectionPoolExhaustedError"}
+    ], "relevant": true},
+    {"trace_id": "trace-003", "timestamp": "2026-04-18T13:50:00Z", "spans": [
+      {"service": "frontend", "operation": "GET /api/v1/user/profile", "duration_ms": 120, "status": "OK"},
+      {"service": "auth", "operation": "/internal/auth/validate", "duration_ms": 45, "status": "OK"},
+      {"service": "data", "operation": "/internal/user/lookup", "duration_ms": 12, "status": "OK"}
+    ], "relevant": false},
+    {"trace_id": "trace-004", "timestamp": "2026-04-18T14:03:30Z", "spans": [
+      {"service": "frontend", "operation": "GET /api/v1/dashboard", "duration_ms": 5100, "status": "ERROR", "error": "504 Gateway Timeout"},
+      {"service": "auth", "operation": "/internal/auth/validate", "duration_ms": 5080, "status": "ERROR", "error": "connection pool exhausted to data-service"}
+    ], "relevant": true},
+    {"trace_id": "trace-005", "timestamp": "2026-04-18T13:59:00Z", "spans": [
+      {"service": "data", "operation": "/internal/user/lookup", "duration_ms": 250, "status": "OK"},
+      {"service": "batch", "operation": "/internal/batch/status", "duration_ms": 30, "status": "OK"}
+    ], "relevant": false},
+    {"trace_id": "trace-006", "timestamp": "2026-04-18T14:01:30Z", "spans": [
+      {"service": "frontend", "operation": "GET /api/v1/user/profile", "duration_ms": 800, "status": "OK"},
+      {"service": "auth", "operation": "/internal/auth/validate", "duration_ms": 600, "status": "OK"},
+      {"service": "data", "operation": "/internal/user/lookup", "duration_ms": 480, "status": "OK"}
+    ], "relevant": true},
+    {"trace_id": "trace-007", "timestamp": "2026-04-18T14:04:00Z", "spans": [
+      {"service": "frontend", "operation": "GET /healthz", "duration_ms": 5, "status": "OK"}
+    ], "relevant": false},
+    {"trace_id": "trace-008", "timestamp": "2026-04-18T13:55:00Z", "spans": [
+      {"service": "auth", "operation": "/internal/auth/validate", "duration_ms": 38, "status": "OK"},
+      {"service": "data", "operation": "/internal/user/lookup", "duration_ms": 10, "status": "OK"}
+    ], "relevant": false},
+    {"trace_id": "trace-009", "timestamp": "2026-04-18T14:02:45Z", "spans": [
+      {"service": "data", "operation": "/internal/user/lookup", "duration_ms": 2800, "status": "SLOW"},
+      {"service": "data", "operation": "db.query", "duration_ms": 2750, "status": "SLOW", "error": "connection wait time: 2700ms"}
+    ], "relevant": true},
+    {"trace_id": "trace-010", "timestamp": "2026-04-18T13:40:00Z", "spans": [
+      {"service": "batch", "operation": "/internal/batch/run", "duration_ms": 45000, "status": "OK"}
+    ], "relevant": false},
+    {"trace_id": "trace-011", "timestamp": "2026-04-18T14:03:45Z", "spans": [
+      {"service": "frontend", "operation": "GET /api/v1/search", "duration_ms": 200, "status": "OK"}
+    ], "relevant": false},
+    {"trace_id": "trace-012", "timestamp": "2026-04-18T14:05:00Z", "spans": [
+      {"service": "data", "operation": "/internal/user/lookup", "duration_ms": 5001, "status": "ERROR", "error": "ConnectionPoolExhaustedError: queue full"},
+      {"service": "auth", "operation": "/internal/auth/validate", "duration_ms": 5050, "status": "ERROR"}
+    ], "relevant": true},
+    {"trace_id": "trace-013", "timestamp": "2026-04-18T13:58:45Z", "spans": [
+      {"service": "data", "operation": "/internal/user/lookup", "duration_ms": 15, "status": "OK"}
+    ], "relevant": false},
+    {"trace_id": "trace-014", "timestamp": "2026-04-18T12:30:00Z", "spans": [
+      {"service": "data", "operation": "db.vacuum", "duration_ms": 120000, "status": "OK"}
+    ], "relevant": false},
+    {"trace_id": "trace-015", "timestamp": "2026-04-18T14:06:30Z", "spans": [
+      {"service": "data", "operation": "/internal/user/lookup", "duration_ms": 50, "status": "OK"}
+    ], "relevant": false}
+  ],
+  "commits": [
+    {"hash": "commit-a1b2c3", "service": "data", "timestamp": "2026-04-18T13:57:00Z", "author": "alice@company.com", "message": "feat: migrate to pgx connection pool library for improved performance", "diff": "--- a/data-service/db/pool.go\n+++ b/data-service/db/pool.go\n@@ -15,7 +15,7 @@\n-import \"database/sql\"\n-var pool = sql.Open(\"postgres\", connStr)\n-pool.SetMaxOpenConns(100)\n-pool.SetMaxIdleConns(25)\n+import \"github.com/jackc/pgx/v5/pgxpool\"\n+config.MaxConns = 20\n+config.MinConns = 5\n+config.MaxConnLifetime = 30 * time.Minute\n+pool, err := pgxpool.NewWithConfig(ctx, config)", "relevant": true},
+    {"hash": "commit-d4e5f6", "service": "data", "timestamp": "2026-04-18T13:00:00Z", "author": "bob@company.com", "message": "feat: add query cache for user lookups", "diff": "--- a/data-service/cache/user_cache.go\n+++ b/data-service/cache/user_cache.go\n+func NewUserCache(ttl time.Duration) *UserCache {\n+    return &UserCache{store: sync.Map{}, ttl: ttl}\n+}", "relevant": false},
+    {"hash": "commit-g7h8i9", "service": "auth", "timestamp": "2026-04-18T13:30:00Z", "author": "carol@company.com", "message": "feat: add rate limiting headers to auth responses", "diff": "--- a/auth-service/middleware/rate_limit.go\n+++ b/auth-service/middleware/rate_limit.go\n+func RateLimitMiddleware(next http.Handler) http.Handler {\n+    return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {\n+        w.Header().Set(\"X-RateLimit-Remaining\", \"100\")\n+        next.ServeHTTP(w, r)\n+    })\n+}", "relevant": false},
+    {"hash": "commit-j1k2l3", "service": "auth", "timestamp": "2026-04-18T13:55:00Z", "author": "carol@company.com", "message": "fix: update JWT validation to handle edge case with expired tokens", "diff": "--- a/auth-service/jwt/validator.go\n+++ b/auth-service/jwt/validator.go\n@@ -42,3 +42,5 @@\n+if token.ExpiresAt.Before(time.Now().Add(-5 * time.Minute)) {\n+    return nil, ErrTokenExpired\n+}", "relevant": false},
+    {"hash": "commit-m4n5o6", "service": "frontend", "timestamp": "2026-04-18T13:45:00Z", "author": "dave@company.com", "message": "perf: optimize CSS bundle with tree-shaking", "diff": "--- a/frontend/webpack.config.js\n+++ b/frontend/webpack.config.js\n+optimization: { usedExports: true, sideEffects: true }", "relevant": false},
+    {"hash": "commit-p7q8r9", "service": "frontend", "timestamp": "2026-04-18T13:30:00Z", "author": "dave@company.com", "message": "feat: add dark mode toggle to settings page", "diff": "--- a/frontend/src/settings.tsx\n+++ b/frontend/src/settings.tsx\n+const [darkMode, setDarkMode] = useState(false);", "relevant": false},
+    {"hash": "commit-s1t2u3", "service": "batch", "timestamp": "2026-04-18T13:45:00Z", "author": "eve@company.com", "message": "fix: improve retry logic for failed batch jobs", "diff": "--- a/batch-service/retry/handler.go\n+++ b/batch-service/retry/handler.go\n+maxRetries := 5\n+backoff := time.Second", "relevant": false},
+    {"hash": "commit-v4w5x6", "service": "batch", "timestamp": "2026-04-18T12:00:00Z", "author": "eve@company.com", "message": "feat: new report generation pipeline for Q2 metrics", "diff": "--- a/batch-service/reports/q2.go\n+++ b/batch-service/reports/q2.go\n+func GenerateQ2Report(ctx context.Context) error {", "relevant": false},
+    {"hash": "commit-y7z8a9", "service": "data", "timestamp": "2026-04-18T11:00:00Z", "author": "alice@company.com", "message": "chore: improve structured logging format", "diff": "--- a/data-service/logging/format.go\n+++ b/data-service/logging/format.go\n+log.SetFormatter(&log.JSONFormatter{TimestampFormat: time.RFC3339})", "relevant": false},
+    {"hash": "commit-b1c2d3", "service": "auth", "timestamp": "2026-04-18T14:05:00Z", "author": "carol@company.com", "message": "hotfix: fix token expiry edge case causing 401s", "diff": "--- a/auth-service/jwt/validator.go\n+++ b/auth-service/jwt/validator.go\n@@ -42,5 +42,3 @@\n-if token.ExpiresAt.Before(time.Now().Add(-5 * time.Minute)) {\n+if token.ExpiresAt.Before(time.Now()) {", "relevant": false}
+  ],
+  "config_changes": [
+    {"config_id": "cfg-001", "service": "data", "timestamp": "2026-04-18T10:00:00Z", "key": "LOG_LEVEL", "old_value": "WARN", "new_value": "INFO", "description": "Increased log verbosity for debugging", "relevant": false},
+    {"config_id": "cfg-002", "service": "auth", "timestamp": "2026-04-18T09:00:00Z", "key": "RATE_LIMIT_MAX", "old_value": "1000", "new_value": "500", "description": "Tightened rate limits after abuse spike", "relevant": false},
+    {"config_id": "cfg-003", "service": "frontend", "timestamp": "2026-04-18T08:00:00Z", "key": "CDN_CACHE_TTL", "old_value": "3600", "new_value": "7200", "description": "Extended CDN cache TTL to reduce origin load", "relevant": false},
+    {"config_id": "cfg-004", "service": "data", "timestamp": "2026-04-18T13:55:00Z", "key": "DB_POOL_MAX_CONNS", "old_value": "100", "new_value": "20", "description": "Reduced pool size — aligned with new pgx library defaults", "relevant": true},
+    {"config_id": "cfg-005", "service": "batch", "timestamp": "2026-04-18T07:00:00Z", "key": "BATCH_CONCURRENCY", "old_value": "4", "new_value": "8", "description": "Doubled batch concurrency for faster processing", "relevant": false}
+  ],
+  "infra_events": [
+    {"event_id": "infra-001", "timestamp": "2026-04-18T06:00:00Z", "type": "maintenance", "description": "Scheduled AZ-a network maintenance window completed. No impact reported.", "relevant": false},
+    {"event_id": "infra-002", "timestamp": "2026-04-18T14:10:00Z", "type": "scaling", "description": "Auto-scaling triggered for data-service: 2 additional pods launched in us-east-1a", "relevant": false}
+  ],
+  "relevant_fact_ids": [
+    "log-data-001", "log-data-002", "log-data-003", "log-data-004", "log-data-005",
+    "log-data-006", "log-data-007", "log-data-008",
+    "log-auth-003", "log-auth-004", "log-auth-005", "log-auth-007",
+    "log-fe-003", "log-fe-004",
+    "cfg-004"
+  ],
+  "ground_truth": {
+    "cause": "commit-a1b2c3",
+    "cause_type": "commit",
+    "chain": [
+      {"service": "data", "effect": "connection_pool_exhaustion"},
+      {"service": "auth", "effect": "upstream_timeout"},
+      {"service": "frontend", "effect": "5xx_errors_to_users"}
+    ]
+  }
+}

@@ -1,0 +1,164 @@
+{
+  "task_id": "task2_cascade_chain",
+  "task_difficulty": "medium",
+  "task_description": "A cascading outage affected all four services (frontend -> auth -> data -> batch). The incident started at 09:15 UTC and lasted 18 minutes. Error rates spiked across multiple services in sequence. The root cause is either a commit or config change in an upstream service that triggered a cascade through the dependency graph. Identify the root cause AND reconstruct the full causal chain of how the failure propagated.",
+  "max_steps": 75,
+  "service_graph": {
+    "frontend": ["auth"],
+    "auth": ["data"],
+    "data": ["batch"],
+    "batch": []
+  },
+  "services": [
+    {"name": "frontend", "status": "down", "dependencies": ["auth"], "recent_deploy_count": 2, "error_rate_during_incident": 78.3},
+    {"name": "auth", "status": "down", "dependencies": ["data"], "recent_deploy_count": 3, "error_rate_during_incident": 85.6},
+    {"name": "data", "status": "degraded", "dependencies": ["batch"], "recent_deploy_count": 3, "error_rate_during_incident": 45.2},
+    {"name": "batch", "status": "down", "dependencies": [], "recent_deploy_count": 2, "error_rate_during_incident": 92.1}
+  ],
+  "incident_window": {
+    "start": "2026-04-17T09:10:00Z",
+    "end": "2026-04-17T09:33:00Z"
+  },
+  "logs": {
+    "frontend": [
+      {"id": "log-fe-101", "timestamp": "2026-04-17T08:30:00Z", "level": "INFO", "message": "Deployment v2.15.0 rolled out — new dashboard widgets", "relevant": false},
+      {"id": "log-fe-102", "timestamp": "2026-04-17T09:00:00Z", "level": "INFO", "message": "Morning traffic ramp-up nominal", "relevant": false},
+      {"id": "log-fe-103", "timestamp": "2026-04-17T09:18:00Z", "level": "ERROR", "message": "Auth service returning 503 for all /api/v1/auth/* endpoints", "relevant": true},
+      {"id": "log-fe-104", "timestamp": "2026-04-17T09:18:05Z", "level": "ERROR", "message": "Circuit breaker OPEN for auth-service — 10 consecutive failures", "relevant": true},
+      {"id": "log-fe-105", "timestamp": "2026-04-17T09:18:30Z", "level": "CRITICAL", "message": "All authenticated endpoints unavailable. Serving 503 to users.", "relevant": true},
+      {"id": "log-fe-106", "timestamp": "2026-04-17T09:19:00Z", "level": "WARN", "message": "CDN serving cached pages only — dynamic content unavailable", "relevant": false},
+      {"id": "log-fe-107", "timestamp": "2026-04-17T09:20:00Z", "level": "INFO", "message": "PagerDuty SEV-1 alert fired: complete frontend outage", "relevant": false},
+      {"id": "log-fe-108", "timestamp": "2026-04-17T09:25:00Z", "level": "ERROR", "message": "User complaints flooding support queue: 142 tickets in 5 minutes", "relevant": false},
+      {"id": "log-fe-109", "timestamp": "2026-04-17T09:15:00Z", "level": "WARN", "message": "Elevated latency detected on auth-dependent routes, p99=4500ms", "relevant": true},
+      {"id": "log-fe-110", "timestamp": "2026-04-17T07:00:00Z", "level": "INFO", "message": "Deployment v2.14.9 rolled out — accessibility improvements", "relevant": false}
+    ],
+    "auth": [
+      {"id": "log-auth-101", "timestamp": "2026-04-17T08:00:00Z", "level": "INFO", "message": "Deployment v1.9.0 rolled out — switched to Redis Cluster for session storage", "relevant": false},
+      {"id": "log-auth-102", "timestamp": "2026-04-17T09:00:00Z", "level": "INFO", "message": "Health check passed. Session store responsive.", "relevant": false},
+      {"id": "log-auth-103", "timestamp": "2026-04-17T09:15:30Z", "level": "ERROR", "message": "Data service /internal/user/permissions returning 500 — response body: 'batch processor unavailable'", "relevant": true},
+      {"id": "log-auth-104", "timestamp": "2026-04-17T09:16:00Z", "level": "ERROR", "message": "Permission enrichment failed for user session. Falling back to cached permissions.", "relevant": true},
+      {"id": "log-auth-105", "timestamp": "2026-04-17T09:16:30Z", "level": "ERROR", "message": "Cached permissions expired for 80% of active sessions — returning 503", "relevant": true},
+      {"id": "log-auth-106", "timestamp": "2026-04-17T09:17:00Z", "level": "CRITICAL", "message": "Auth service entering full degradation — cannot validate tokens without permissions data", "relevant": true},
+      {"id": "log-auth-107", "timestamp": "2026-04-17T09:17:30Z", "level": "ERROR", "message": "Session store Redis Cluster healthy but permissions data stale (last refresh: 45 min ago)", "relevant": false},
+      {"id": "log-auth-108", "timestamp": "2026-04-17T09:10:00Z", "level": "INFO", "message": "Deployment v1.9.1 rolled out — added permission caching with 30-min TTL", "relevant": false},
+      {"id": "log-auth-109", "timestamp": "2026-04-17T06:00:00Z", "level": "INFO", "message": "Deployment v1.8.9 rolled out — security patch for CVE-2026-1234", "relevant": false},
+      {"id": "log-auth-110", "timestamp": "2026-04-17T09:30:00Z", "level": "INFO", "message": "Rollback initiated for v1.9.1 — reverting permission cache TTL", "relevant": false}
+    ],
+    "data": [
+      {"id": "log-data-101", "timestamp": "2026-04-17T08:30:00Z", "level": "INFO", "message": "Deployment v3.3.0 rolled out — refactored batch integration layer", "relevant": true},
+      {"id": "log-data-102", "timestamp": "2026-04-17T09:00:00Z", "level": "INFO", "message": "All endpoints healthy. Batch service connection verified.", "relevant": false},
+      {"id": "log-data-103", "timestamp": "2026-04-17T09:12:00Z", "level": "WARN", "message": "Batch service /internal/batch/permissions returning slow responses (avg 3200ms)", "relevant": true},
+      {"id": "log-data-104", "timestamp": "2026-04-17T09:14:00Z", "level": "ERROR", "message": "Batch service connection timeout on /internal/batch/permissions — 5000ms exceeded", "relevant": true},
+      {"id": "log-data-105", "timestamp": "2026-04-17T09:14:30Z", "level": "ERROR", "message": "Fallback: returning cached permissions for /internal/user/permissions endpoint (stale by 2h)", "relevant": true},
+      {"id": "log-data-106", "timestamp": "2026-04-17T09:15:00Z", "level": "ERROR", "message": "Batch service fully unresponsive. Marking permissions endpoint as degraded.", "relevant": true},
+      {"id": "log-data-107", "timestamp": "2026-04-17T09:15:10Z", "level": "WARN", "message": "500 errors on /internal/user/permissions — batch dependency failed", "relevant": true},
+      {"id": "log-data-108", "timestamp": "2026-04-17T09:20:00Z", "level": "ERROR", "message": "Thread pool saturation: 48/50 threads blocked waiting on batch-service responses", "relevant": false},
+      {"id": "log-data-109", "timestamp": "2026-04-17T07:00:00Z", "level": "INFO", "message": "Deployment v3.2.9 rolled out — improved error handling for batch timeouts", "relevant": false},
+      {"id": "log-data-110", "timestamp": "2026-04-17T06:00:00Z", "level": "INFO", "message": "Deployment v3.2.8 rolled out — database index optimization", "relevant": false}
+    ],
+    "batch": [
+      {"id": "log-batch-101", "timestamp": "2026-04-17T08:45:00Z", "level": "INFO", "message": "Deployment v1.0.0 rolled out — new permissions pre-computation pipeline", "relevant": true},
+      {"id": "log-batch-102", "timestamp": "2026-04-17T09:00:00Z", "level": "INFO", "message": "Permissions pre-computation job started. Processing 50,000 user records.", "relevant": true},
+      {"id": "log-batch-103", "timestamp": "2026-04-17T09:10:00Z", "level": "WARN", "message": "Memory usage at 85% — permissions pre-computation consuming 6.2GB", "relevant": true},
+      {"id": "log-batch-104", "timestamp": "2026-04-17T09:11:00Z", "level": "ERROR", "message": "OutOfMemoryError: Java heap space — permissions computation for org 'enterprise-corp' requires 4GB alone", "relevant": true},
+      {"id": "log-batch-105", "timestamp": "2026-04-17T09:11:30Z", "level": "CRITICAL", "message": "Batch service OOM killed by Kubernetes. Pod restart initiated.", "relevant": true},
+      {"id": "log-batch-106", "timestamp": "2026-04-17T09:12:00Z", "level": "INFO", "message": "Pod restarting... attempt 1/5", "relevant": true},
+      {"id": "log-batch-107", "timestamp": "2026-04-17T09:12:30Z", "level": "ERROR", "message": "Pod restart failed — permissions pre-computation auto-starts on boot and immediately OOMs", "relevant": true},
+      {"id": "log-batch-108", "timestamp": "2026-04-17T09:13:00Z", "level": "CRITICAL", "message": "CrashLoopBackOff: Pod has restarted 3 times in 90 seconds", "relevant": true},
+      {"id": "log-batch-109", "timestamp": "2026-04-17T09:14:00Z", "level": "CRITICAL", "message": "Batch service UNAVAILABLE — all pods in CrashLoopBackOff", "relevant": true},
+      {"id": "log-batch-110", "timestamp": "2026-04-17T07:00:00Z", "level": "INFO", "message": "Deployment v0.9.5 rolled out — improved batch job scheduling", "relevant": false},
+      {"id": "log-batch-111", "timestamp": "2026-04-17T09:30:00Z", "level": "INFO", "message": "Manual intervention: disabled auto-start of permissions pipeline. Pod stabilizing.", "relevant": false},
+      {"id": "log-batch-112", "timestamp": "2026-04-17T06:00:00Z", "level": "INFO", "message": "Batch processing queue healthy, 0 failed jobs", "relevant": false}
+    ]
+  },
+  "traces": [
+    {"trace_id": "trace-101", "timestamp": "2026-04-17T09:15:00Z", "spans": [
+      {"service": "frontend", "operation": "GET /api/v1/dashboard", "duration_ms": 5200, "status": "ERROR", "error": "auth service 503"},
+      {"service": "auth", "operation": "/internal/auth/validate", "duration_ms": 5100, "status": "ERROR", "error": "permissions lookup failed"},
+      {"service": "data", "operation": "/internal/user/permissions", "duration_ms": 5050, "status": "ERROR", "error": "batch service timeout"},
+      {"service": "batch", "operation": "/internal/batch/permissions", "duration_ms": 0, "status": "ERROR", "error": "connection refused — pod CrashLoopBackOff"}
+    ], "relevant": true},
+    {"trace_id": "trace-102", "timestamp": "2026-04-17T09:16:00Z", "spans": [
+      {"service": "auth", "operation": "/internal/auth/validate", "duration_ms": 100, "status": "ERROR", "error": "cached permissions expired, data-service returning 500"}
+    ], "relevant": true},
+    {"trace_id": "trace-103", "timestamp": "2026-04-17T09:00:00Z", "spans": [
+      {"service": "frontend", "operation": "GET /api/v1/dashboard", "duration_ms": 180, "status": "OK"},
+      {"service": "auth", "operation": "/internal/auth/validate", "duration_ms": 50, "status": "OK"},
+      {"service": "data", "operation": "/internal/user/permissions", "duration_ms": 30, "status": "OK"},
+      {"service": "batch", "operation": "/internal/batch/permissions", "duration_ms": 15, "status": "OK"}
+    ], "relevant": false},
+    {"trace_id": "trace-104", "timestamp": "2026-04-17T09:12:30Z", "spans": [
+      {"service": "data", "operation": "/internal/user/permissions", "duration_ms": 5000, "status": "ERROR", "error": "batch service connection timeout"},
+      {"service": "batch", "operation": "/internal/batch/permissions", "duration_ms": 0, "status": "ERROR", "error": "connection refused"}
+    ], "relevant": true},
+    {"trace_id": "trace-105", "timestamp": "2026-04-17T09:18:00Z", "spans": [
+      {"service": "frontend", "operation": "POST /api/v1/login", "duration_ms": 50, "status": "ERROR", "error": "503 Service Unavailable"},
+      {"service": "auth", "operation": "/internal/auth/login", "duration_ms": 10, "status": "ERROR", "error": "service in full degradation"}
+    ], "relevant": true},
+    {"trace_id": "trace-106", "timestamp": "2026-04-17T08:50:00Z", "spans": [
+      {"service": "batch", "operation": "/internal/batch/status", "duration_ms": 20, "status": "OK"}
+    ], "relevant": false},
+    {"trace_id": "trace-107", "timestamp": "2026-04-17T09:11:00Z", "spans": [
+      {"service": "batch", "operation": "/internal/batch/permissions", "duration_ms": 8000, "status": "ERROR", "error": "OutOfMemoryError during permissions computation"}
+    ], "relevant": true},
+    {"trace_id": "trace-108", "timestamp": "2026-04-17T09:20:00Z", "spans": [
+      {"service": "frontend", "operation": "GET /healthz", "duration_ms": 5, "status": "OK"}
+    ], "relevant": false},
+    {"trace_id": "trace-109", "timestamp": "2026-04-17T09:14:00Z", "spans": [
+      {"service": "data", "operation": "/internal/user/lookup", "duration_ms": 80, "status": "OK"}
+    ], "relevant": false},
+    {"trace_id": "trace-110", "timestamp": "2026-04-17T09:25:00Z", "spans": [
+      {"service": "auth", "operation": "/internal/auth/validate", "duration_ms": 5100, "status": "ERROR", "error": "still in degradation mode"}
+    ], "relevant": false}
+  ],
+  "commits": [
+    {"hash": "commit-bat100", "service": "batch", "timestamp": "2026-04-17T08:44:00Z", "author": "frank@company.com", "message": "feat: add permissions pre-computation pipeline — processes all user org permissions on startup for faster auth lookups", "diff": "--- a/batch-service/permissions/precompute.go\n+++ b/batch-service/permissions/precompute.go\n+func PrecomputePermissions(ctx context.Context) error {\n+    users, _ := db.GetAllUsers(ctx) // ~50,000 records\n+    for _, user := range users {\n+        orgs, _ := db.GetUserOrgs(ctx, user.ID)\n+        for _, org := range orgs {\n+            perms := computeOrgPermissions(org) // loads entire org tree into memory\n+            cache.Set(fmt.Sprintf(\"perms:%s:%s\", user.ID, org.ID), perms)\n+        }\n+    }\n+    return nil\n+}\n+\n+func init() {\n+    go PrecomputePermissions(context.Background()) // auto-start on boot\n+}", "relevant": true},
+    {"hash": "commit-dat100", "service": "data", "timestamp": "2026-04-17T08:29:00Z", "author": "alice@company.com", "message": "refactor: reorganize batch integration layer to use new permissions endpoint", "diff": "--- a/data-service/integrations/batch.go\n+++ b/data-service/integrations/batch.go\n-endpoint := \"/internal/batch/compute\"\n+endpoint := \"/internal/batch/permissions\"\n+timeout := 5 * time.Second", "relevant": false},
+    {"hash": "commit-auth100", "service": "auth", "timestamp": "2026-04-17T08:00:00Z", "author": "carol@company.com", "message": "feat: switch session storage to Redis Cluster", "diff": "--- a/auth-service/sessions/store.go\n+++ b/auth-service/sessions/store.go\n-store := redis.NewClient(opts)\n+store := redis.NewClusterClient(clusterOpts)", "relevant": false},
+    {"hash": "commit-auth101", "service": "auth", "timestamp": "2026-04-17T09:09:00Z", "author": "carol@company.com", "message": "feat: add permission caching with 30-min TTL", "diff": "--- a/auth-service/permissions/cache.go\n+++ b/auth-service/permissions/cache.go\n+func CachePermissions(userID string, perms []Permission) {\n+    cache.SetWithTTL(\"perms:\"+userID, perms, 30*time.Minute)\n+}", "relevant": false},
+    {"hash": "commit-fe100", "service": "frontend", "timestamp": "2026-04-17T08:30:00Z", "author": "dave@company.com", "message": "feat: new dashboard widgets for Q2 metrics", "diff": "--- a/frontend/src/dashboard/widgets.tsx\n+++ b/frontend/src/dashboard/widgets.tsx\n+export const Q2Widget = () => <div>Q2 Metrics</div>", "relevant": false},
+    {"hash": "commit-fe101", "service": "frontend", "timestamp": "2026-04-17T07:00:00Z", "author": "dave@company.com", "message": "fix: accessibility improvements for screen readers", "diff": "--- a/frontend/src/components/nav.tsx\n+++ a/frontend/src/components/nav.tsx\n+aria-label=\"Main navigation\"", "relevant": false},
+    {"hash": "commit-bat101", "service": "batch", "timestamp": "2026-04-17T07:00:00Z", "author": "frank@company.com", "message": "chore: improve batch job scheduling with priority queues", "diff": "--- a/batch-service/scheduler/queue.go\n+++ b/batch-service/scheduler/queue.go\n+type PriorityQueue struct { items []Job }", "relevant": false},
+    {"hash": "commit-dat101", "service": "data", "timestamp": "2026-04-17T07:00:00Z", "author": "bob@company.com", "message": "chore: improved error handling for batch timeouts", "diff": "--- a/data-service/integrations/batch.go\n+if err != nil { return fmt.Errorf(\"batch timeout: %w\", err) }", "relevant": false},
+    {"hash": "commit-dat102", "service": "data", "timestamp": "2026-04-17T06:00:00Z", "author": "bob@company.com", "message": "perf: database index optimization for user queries", "diff": "--- a/data-service/migrations/006_index.sql\n+CREATE INDEX idx_users_org ON users(org_id);", "relevant": false},
+    {"hash": "commit-auth102", "service": "auth", "timestamp": "2026-04-17T06:00:00Z", "author": "carol@company.com", "message": "security: patch for CVE-2026-1234", "diff": "--- a/auth-service/deps/go.mod\n+golang.org/x/crypto v0.22.0 // patched", "relevant": false}
+  ],
+  "config_changes": [
+    {"config_id": "cfg-101", "service": "batch", "timestamp": "2026-04-17T08:40:00Z", "key": "PERMISSIONS_PRECOMPUTE_ENABLED", "old_value": "false", "new_value": "true", "description": "Enabled new permissions pre-computation pipeline", "relevant": true},
+    {"config_id": "cfg-102", "service": "batch", "timestamp": "2026-04-17T08:42:00Z", "key": "JVM_MAX_HEAP", "old_value": "4g", "new_value": "4g", "description": "No change — confirmed current heap setting", "relevant": true},
+    {"config_id": "cfg-103", "service": "data", "timestamp": "2026-04-17T08:28:00Z", "key": "BATCH_TIMEOUT_MS", "old_value": "10000", "new_value": "5000", "description": "Reduced batch timeout to 5 seconds for faster failover", "relevant": false},
+    {"config_id": "cfg-104", "service": "auth", "timestamp": "2026-04-17T09:08:00Z", "key": "PERMISSION_CACHE_TTL_MINUTES", "old_value": "60", "new_value": "30", "description": "Reduced cache TTL to serve fresher permissions", "relevant": false},
+    {"config_id": "cfg-105", "service": "frontend", "timestamp": "2026-04-17T08:00:00Z", "key": "API_TIMEOUT_MS", "old_value": "5000", "new_value": "5000", "description": "No change — confirmed current setting", "relevant": false},
+    {"config_id": "cfg-106", "service": "batch", "timestamp": "2026-04-17T06:00:00Z", "key": "BATCH_WORKER_COUNT", "old_value": "4", "new_value": "8", "description": "Increased batch worker count", "relevant": false},
+    {"config_id": "cfg-107", "service": "data", "timestamp": "2026-04-17T05:00:00Z", "key": "MAX_QUERY_TIMEOUT_MS", "old_value": "3000", "new_value": "5000", "description": "Increased query timeout", "relevant": false},
+    {"config_id": "cfg-108", "service": "auth", "timestamp": "2026-04-17T05:00:00Z", "key": "SESSION_TTL_HOURS", "old_value": "24", "new_value": "12", "description": "Shortened session TTL for security", "relevant": false},
+    {"config_id": "cfg-109", "service": "frontend", "timestamp": "2026-04-17T04:00:00Z", "key": "FEATURE_FLAG_NEW_DASHBOARD", "old_value": "false", "new_value": "true", "description": "Enabled new dashboard feature", "relevant": false},
+    {"config_id": "cfg-110", "service": "batch", "timestamp": "2026-04-17T03:00:00Z", "key": "LOG_LEVEL", "old_value": "INFO", "new_value": "DEBUG", "description": "Enable debug logging for new pipeline testing", "relevant": false},
+    {"config_id": "cfg-111", "service": "data", "timestamp": "2026-04-17T02:00:00Z", "key": "CONNECTION_POOL_SIZE", "old_value": "50", "new_value": "50", "description": "Confirmed pool size unchanged", "relevant": false},
+    {"config_id": "cfg-112", "service": "auth", "timestamp": "2026-04-17T01:00:00Z", "key": "RATE_LIMIT_BURST", "old_value": "100", "new_value": "200", "description": "Increased burst limit", "relevant": false}
+  ],
+  "infra_events": [
+    {"event_id": "infra-101", "timestamp": "2026-04-17T03:00:00Z", "type": "maintenance", "description": "Scheduled database maintenance in us-east-1b completed. No impact.", "relevant": false},
+    {"event_id": "infra-102", "timestamp": "2026-04-17T09:11:45Z", "type": "oom_kill", "description": "Kubernetes OOM-killed batch-service pod batch-worker-0 in namespace production. Memory limit: 4Gi, actual: 6.2Gi.", "relevant": true},
+    {"event_id": "infra-103", "timestamp": "2026-04-17T09:14:00Z", "type": "crash_loop", "description": "batch-service pods entering CrashLoopBackOff. Restart count: 3. Last exit code: 137 (OOM).", "relevant": true}
+  ],
+  "relevant_fact_ids": [
+    "log-batch-101", "log-batch-102", "log-batch-103", "log-batch-104", "log-batch-105",
+    "log-batch-106", "log-batch-107", "log-batch-108", "log-batch-109",
+    "log-data-101", "log-data-103", "log-data-104", "log-data-105", "log-data-106", "log-data-107",
+    "log-auth-103", "log-auth-104", "log-auth-105", "log-auth-106",
+    "log-fe-103", "log-fe-104", "log-fe-105", "log-fe-109",
+    "cfg-101", "cfg-102",
+    "commit-bat100"
+  ],
+  "ground_truth": {
+    "cause": "commit-bat100",
+    "cause_type": "commit",
+    "chain": [
+      {"service": "batch", "effect": "oom_crash_loop"},
+      {"service": "data", "effect": "batch_dependency_timeout"},
+      {"service": "auth", "effect": "permissions_lookup_failure"},
+      {"service": "frontend", "effect": "complete_service_unavailability"}
+    ]
+  }
+}

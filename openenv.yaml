@@ -1,0 +1,43 @@
+name: PostmortemEnv
+version: "1.0.0"
+description: >
+  An epistemic RL environment where LLM agents investigate cloud outages
+  that have already happened. The agent receives frozen telemetry (logs,
+  traces, commits, configs, infra events) and must identify the root cause
+  and causal chain within a bounded query budget.
+author: Three Musketeers
+tags:
+  - openenv
+  - postmortem
+  - incident-investigation
+  - epistemic-rl
+  - root-cause-analysis
+
+observation_model: models.observation.Observation
+action_model: models.action.Action
+reward_model: models.reward.Reward
+
+tasks:
+  - id: task1_recent_deploy
+    name: "Recent Deploy Blames"
+    difficulty: easy
+    description: "Single-service outage caused by a recent deploy. Identify the culprit commit."
+    max_steps: 40
+
+  - id: task2_cascade_chain
+    name: "Cascade Chain"
+    difficulty: medium
+    description: "Cross-service cascade: an upstream bug propagates through the service DAG. Find the cause and trace the chain."
+    max_steps: 75
+
+  - id: task3_correlated_cause
+    name: "Correlated Root Cause"
+    difficulty: hard
+    description: "A deploy and a concurrent infrastructure event combine to cause the outage. Neither alone is sufficient."
+    max_steps: 120
+
+endpoints:
+  reset: /reset
+  step: /step
+  state: /state
+  health: /health

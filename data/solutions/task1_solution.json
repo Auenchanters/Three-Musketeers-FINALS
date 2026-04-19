@@ -1,0 +1,31 @@
+{
+  "task_id": "task1_recent_deploy",
+  "optimal_savings_score": 0.99,
+  "ground_truth": {
+    "cause": "commit-a1b2c3",
+    "cause_type": "commit",
+    "chain": [
+      {"service": "data", "effect": "connection_pool_exhaustion"},
+      {"service": "auth", "effect": "upstream_timeout"},
+      {"service": "frontend", "effect": "5xx_errors_to_users"}
+    ]
+  },
+  "optimal_action_sequence": [
+    {"action_type": "query_logs", "service": "data", "keyword": "error", "reason": "Start with the service showing highest error rate"},
+    {"action_type": "query_logs", "service": "data", "keyword": "deploy", "reason": "Check for recent deployments on data service"},
+    {"action_type": "diff_commit", "commit_hash": "commit-a1b2c3", "reason": "Most recent deploy on data service, right before incident"},
+    {"action_type": "query_logs", "service": "data", "keyword": "connection", "reason": "The commit changed connection pool — check for pool errors"},
+    {"action_type": "fetch_trace", "trace_id": "trace-001", "reason": "Get the cascade trace during incident"},
+    {"action_type": "hypothesize", "cause_entity_id": "commit-a1b2c3", "reason": "Commit reduced max_conns from 100 to 20, causing pool exhaustion"},
+    {"action_type": "explain_chain", "chain": [
+      {"service": "data", "effect": "connection_pool_exhaustion"},
+      {"service": "auth", "effect": "upstream_timeout"},
+      {"service": "frontend", "effect": "5xx_errors_to_users"}
+    ], "reason": "Data pool exhaustion cascaded through auth to frontend"},
+    {"action_type": "submit", "final_cause": "commit-a1b2c3", "final_chain": [
+      {"service": "data", "effect": "connection_pool_exhaustion"},
+      {"service": "auth", "effect": "upstream_timeout"},
+      {"service": "frontend", "effect": "5xx_errors_to_users"}
+    ], "reason": "Confirmed: commit-a1b2c3 reduced pool from 100 to 20 conns, causing cascading failure"}
+  ]
+}
