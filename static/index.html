@@ -1,157 +1,161 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="color-scheme" content="dark" />
   <title>PostmortemEnv — Epistemic RL for Cloud Outages</title>
-  <meta name="description" content="A premium live agent console for PostmortemEnv: watch LLMs investigate cloud outages step by step." />
+  <meta name="description" content="A disciplined live console for PostmortemEnv: watch investigators reason about cloud outages step by step." />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Doto:wght@400;700&family=Space+Grotesk:wght@300;400;500;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/static/style.css" />
-  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='14' fill='%230a0a0a' stroke='%2300e5ff' stroke-width='2'/%3E%3Ccircle cx='16' cy='16' r='5' fill='%2300e5ff'/%3E%3C/svg%3E" />
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23000000'/%3E%3Ccircle cx='16' cy='16' r='5' fill='%23FFFFFF'/%3E%3C/svg%3E" />
 </head>
 <body>
-  <div class="bg-grid"></div>
-  <div class="bg-glow"></div>
-
   <header class="topbar">
     <div class="brand">
       <span class="logo-dot"></span>
       <span class="brand-name">PostmortemEnv</span>
-      <span class="brand-tag">epistemic rl · live console</span>
+      <span class="brand-tag">EPISTEMIC RL · LIVE CONSOLE</span>
     </div>
     <div class="top-actions">
       <div class="status-pill" id="statusPill" data-status="idle">
-        <span class="status-dot"></span>
-        <span class="status-text">idle</span>
+        <span class="status-text">[ IDLE ]</span>
       </div>
       <a class="btn-link" href="/docs" target="_blank" rel="noopener">API</a>
-      <a class="btn-link" href="https://github.com/Auenchanters/Three-Musketeers-FINALS" target="_blank" rel="noopener">GitHub</a>
+      <a class="btn-link" href="https://github.com/Auenchanters/Three-Musketeers-FINALS" target="_blank" rel="noopener">GITHUB</a>
     </div>
   </header>
 
   <main class="layout">
-    <!-- Left sidebar: tasks, curriculum, history -->
+    <!-- Left sidebar: scenario + investigator + drawers -->
     <aside class="sidebar">
-      <section class="card">
-        <div class="card-title">Scenarios</div>
+      <section class="section">
+        <div class="section-title"><span class="section-step">[ 01 ]</span> PICK A SCENARIO</div>
         <ul class="task-list" id="taskList">
-          <li class="task-skeleton">Loading…</li>
+          <li class="task-skeleton">LOADING…</li>
         </ul>
       </section>
 
-      <section class="card">
-        <div class="card-title">Agent</div>
+      <section class="section">
+        <div class="section-title"><span class="section-step">[ 02 ]</span> PICK AN INVESTIGATOR</div>
         <div class="radio-row" id="agentRow">
-          <label class="radio-pill selected"><input type="radio" name="agent" value="oracle" checked><span>Oracle</span></label>
-          <label class="radio-pill"><input type="radio" name="agent" value="random"><span>Random</span></label>
+          <label class="radio-pill selected"><input type="radio" name="agent" value="oracle" checked><span>ORACLE</span></label>
+          <label class="radio-pill"><input type="radio" name="agent" value="random"><span>RANDOM</span></label>
           <label class="radio-pill"><input type="radio" name="agent" value="llm"><span>LLM</span></label>
         </div>
         <div id="llmPanel" class="llm-panel hidden">
+          <div class="llm-panel-note">Only needed for the LLM investigator.</div>
           <label class="field">
-            <span>Provider</span>
+            <span>PROVIDER</span>
             <select id="llmProvider">
               <option value="anthropic">Anthropic · Haiku 4.5</option>
               <option value="openai">OpenAI · gpt-4o-mini</option>
             </select>
           </label>
           <label class="field">
-            <span>API key <em>(not stored)</em></span>
+            <span>API KEY <em>(not stored)</em></span>
             <input id="llmKey" type="password" autocomplete="off" placeholder="sk-… or anthropic-…" />
           </label>
           <label class="field">
-            <span>Model override</span>
-            <input id="llmModel" type="text" placeholder="(optional, leave blank for default)" />
+            <span>MODEL OVERRIDE</span>
+            <input id="llmModel" type="text" placeholder="(optional, default used if blank)" />
           </label>
         </div>
-        <button class="btn-primary" id="runBtn" type="button">
-          <span class="btn-label">Start investigation</span>
-          <span class="btn-kbd">↵</span>
-        </button>
-      </section>
-
-      <section class="card">
-        <div class="card-title">
-          Curriculum
-          <span class="muted" id="curriculumSub">ELO / difficulty</span>
+        <div class="action-row">
+          <button class="btn btn-primary" id="runBtn" type="button">
+            <span class="btn-label">START INVESTIGATION</span>
+            <span class="btn-kbd">↵</span>
+          </button>
+          <span class="inline-status" id="inlineStatus"></span>
         </div>
-        <div id="curriculumPanel" class="curriculum"></div>
       </section>
 
-      <section class="card">
-        <div class="card-title">History</div>
+      <details class="drawer">
+        <summary>
+          <span class="drawer-icon">[ + ]</span>
+          <span class="drawer-title">DIFFICULTY RATINGS</span>
+          <span class="drawer-hint">How scenarios are weighted by past success</span>
+        </summary>
+        <div id="curriculumPanel" class="curriculum"></div>
+      </details>
+
+      <details class="drawer">
+        <summary>
+          <span class="drawer-icon">[ + ]</span>
+          <span class="drawer-title">RECENT RUNS</span>
+          <span class="drawer-hint">Last 12 sessions</span>
+        </summary>
         <ul class="history-list" id="historyList">
-          <li class="muted empty">no runs yet</li>
+          <li class="muted empty">— no runs yet —</li>
         </ul>
-      </section>
+      </details>
     </aside>
 
     <!-- Center: live stream of agent steps -->
     <section class="stream">
       <div class="stream-header">
         <div>
-          <h1 id="streamTitle">Start a run</h1>
-          <p class="subtitle" id="streamSubtitle">Pick a scenario and an agent on the left. Every query, trace, and hypothesis shows up here as it happens.</p>
+          <div class="stream-label">LIVE INVESTIGATION</div>
+          <h1 id="streamTitle">Pick a scenario to begin</h1>
+          <p class="subtitle" id="streamSubtitle">Every query, trace, and hypothesis appears here as it happens.</p>
         </div>
         <div class="stream-meta" id="streamMeta"></div>
       </div>
       <div class="stream-body" id="streamBody">
         <div class="empty-state">
-          <div class="empty-hero">🔍</div>
-          <div class="empty-title">No investigation running</div>
-          <div class="empty-sub">Watch the agent query logs, diff commits, and build a causal chain — step by step.</div>
+          <div class="empty-hero">READY.</div>
+          <div class="empty-title">Pick a scenario, choose an investigator, press START.</div>
+          <div class="empty-sub">— no active run —</div>
         </div>
       </div>
     </section>
 
     <!-- Right: results + reasoning -->
     <aside class="results">
-      <section class="card score-card">
-        <div class="card-title">Score</div>
+      <section class="section">
+        <div class="section-title">SCORE</div>
         <div class="score-bars">
           <div class="score-row">
-            <span class="label">episode</span>
-            <div class="bar"><div class="fill" id="scoreFill" style="width:0%"></div></div>
+            <span class="label">EPISODE</span>
+            <div class="bar"><div class="fill" id="scoreFill"></div></div>
             <span class="value" id="scoreValue">—</span>
           </div>
           <div class="score-row">
-            <span class="label">budget</span>
-            <div class="bar"><div class="fill alt" id="budgetFill" style="width:0%"></div></div>
+            <span class="label">BUDGET</span>
+            <div class="bar"><div class="fill alt" id="budgetFill"></div></div>
             <span class="value" id="budgetValue">— / —</span>
           </div>
         </div>
         <div class="score-grid">
-          <div class="stat"><div class="stat-label">facts</div><div class="stat-value" id="statFacts">0</div></div>
-          <div class="stat"><div class="stat-label">wrong hyp</div><div class="stat-value" id="statWrong">0</div></div>
-          <div class="stat"><div class="stat-label">tokens in</div><div class="stat-value" id="statTokensIn">0</div></div>
-          <div class="stat"><div class="stat-label">cached</div><div class="stat-value" id="statCached">0</div></div>
+          <div class="stat"><div class="stat-label">FACTS</div><div class="stat-value" id="statFacts">0</div></div>
+          <div class="stat"><div class="stat-label">WRONG HYP</div><div class="stat-value" id="statWrong">0</div></div>
+          <div class="stat"><div class="stat-label">TOKENS IN</div><div class="stat-value" id="statTokensIn">0</div></div>
+          <div class="stat"><div class="stat-label">CACHED</div><div class="stat-value" id="statCached">0</div></div>
         </div>
       </section>
 
-      <section class="card">
-        <div class="card-title">Root cause</div>
+      <section class="section">
+        <div class="section-title">IDENTIFIED ROOT CAUSE</div>
         <div class="cause-slot" id="causeSlot">
           <span class="muted">—</span>
         </div>
       </section>
 
-      <section class="card">
-        <div class="card-title">Causal chain</div>
+      <section class="section">
+        <div class="section-title">SEQUENCE OF EFFECTS</div>
         <ol class="chain-list" id="chainList">
           <li class="muted">—</li>
         </ol>
       </section>
 
-      <section class="card">
-        <div class="card-title">Service graph</div>
+      <section class="section">
+        <div class="section-title">SERVICE DEPENDENCIES</div>
         <div class="graph" id="graph"></div>
       </section>
     </aside>
   </main>
-
-  <div class="toast-stack" id="toastStack"></div>
 
   <script src="/static/app.js" type="module"></script>
 </body>

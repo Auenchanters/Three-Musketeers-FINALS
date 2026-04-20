@@ -24,6 +24,8 @@ const state = {
 document.addEventListener("DOMContentLoaded", async () => {
   bindAgentRow();
   bindRunButton();
+  renderSegments($("scoreFill"), 0);
+  renderSegments($("budgetFill"), 0);
   await loadTasks();
   await loadCurriculum();
   await loadHistory();
@@ -205,7 +207,7 @@ async function startRun() {
 
   setStatus("running");
   $("runBtn").disabled = true;
-  $("runBtn").querySelector(".btn-label").textContent = "running…";
+  $("runBtn").querySelector(".btn-label").textContent = "RUNNING…";
 
   try {
     const res = await fetch("/api/runs", {
@@ -304,7 +306,7 @@ function onStep(ev) {
   if (toggle && obsEl) {
     toggle.addEventListener("click", () => {
       obsEl.classList.toggle("collapsed");
-      toggle.textContent = obsEl.classList.contains("collapsed") ? "expand" : "collapse";
+      toggle.textContent = obsEl.classList.contains("collapsed") ? "EXPAND" : "COLLAPSE";
     });
   }
 
@@ -333,7 +335,7 @@ function onStep(ev) {
 function onThought(ev) {
   const div = document.createElement("div");
   div.className = "thought";
-  div.textContent = `⟡ ${ev.text}`;
+  div.textContent = `> ${ev.text}`;
   clearEmptyState();
   const body = $("streamBody");
   body.appendChild(div);
@@ -408,7 +410,7 @@ function renderObservation(text) {
   const collapsed = text.length > 400;
   return `
     <div class="observation ${collapsed ? "collapsed" : ""}">${escapeHtml(text)}</div>
-    ${collapsed ? '<span class="observation-expand">expand</span>' : ""}
+    ${collapsed ? '<span class="observation-expand">EXPAND</span>' : ""}
   `;
 }
 
@@ -420,7 +422,7 @@ function renderCauseAndChain() {
   const slot = $("causeSlot");
   if (state.cause) {
     const ok = state.groundTruthCause && state.cause === state.groundTruthCause;
-    slot.innerHTML = `<span>${escapeHtml(state.cause)}${ok ? " ✓" : ""}</span>`;
+    slot.innerHTML = `<span>${escapeHtml(state.cause)}${ok ? '<span class="match-tag">[ MATCH ]</span>' : ""}</span>`;
     slot.classList.toggle("matched", !!ok);
   } else {
     slot.innerHTML = '<span class="muted">—</span>';
@@ -483,19 +485,31 @@ function diffFacts(currentFacts) {
   return out;
 }
 
+function renderSegments(el, value, { over = false } = {}) {
+  const v = Math.max(0, Math.min(1, value));
+  const count = Math.round(v * 20);
+  el.classList.toggle("over", over);
+  el.innerHTML = "";
+  for (let i = 0; i < 20; i++) {
+    const seg = document.createElement("span");
+    seg.className = "seg" + (i < count ? " on" : "");
+    el.appendChild(seg);
+  }
+}
+
 function updateScore(score, steps) {
   if (score === null || score === undefined) {
-    $("scoreFill").style.width = "0%";
+    renderSegments($("scoreFill"), 0);
     $("scoreValue").textContent = "—";
     return;
   }
-  $("scoreFill").style.width = `${Math.round(score * 100)}%`;
+  renderSegments($("scoreFill"), score);
   $("scoreValue").textContent = score.toFixed(3);
 }
 
 function updateBudget(used, max) {
-  const pct = Math.round((used / max) * 100);
-  $("budgetFill").style.width = `${pct}%`;
+  const pct = used / max;
+  renderSegments($("budgetFill"), pct, { over: pct >= 0.9 });
   $("budgetValue").textContent = `${used} / ${max}`;
 }
 
@@ -509,12 +523,12 @@ function updateStats({ facts, wrong, tokensIn, cached }) {
 function setStatus(s) {
   const pill = $("statusPill");
   pill.dataset.status = s;
-  pill.querySelector(".status-text").textContent = s;
+  pill.querySelector(".status-text").textContent = `[ ${s.toUpperCase()} ]`;
 }
 
 function resetRunButton() {
   $("runBtn").disabled = false;
-  $("runBtn").querySelector(".btn-label").textContent = "Start investigation";
+  $("runBtn").querySelector(".btn-label").textContent = "START INVESTIGATION";
 }
 
 function clearStream() {
@@ -527,11 +541,18 @@ function clearEmptyState() {
 }
 
 function toast(msg, kind = "") {
-  const el = document.createElement("div");
-  el.className = `toast ${kind}`;
-  el.textContent = msg;
-  $("toastStack").appendChild(el);
-  setTimeout(() => el.remove(), 4500);
+  const el = $("inlineStatus");
+  if (!el) return;
+  const prefix = kind === "error" ? "ERROR" : kind === "ok" ? "OK" : "INFO";
+  el.dataset.kind = kind || "info";
+  el.textContent = `[${prefix}] ${msg}`;
+  clearTimeout(toast._timer);
+  toast._timer = setTimeout(() => {
+    if (el.textContent.includes(msg)) {
+      el.textContent = "";
+      el.dataset.kind = "";
+    }
+  }, 6000);
 }
 
 function shortTaskName(tid) {
