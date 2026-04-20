@@ -16,3 +16,5 @@ venv/
 .DS_Store
 .claude/
 .ruff_cache/
+training_data/curriculum_state.json
+training_data/runs/
