@@ -36,9 +36,15 @@ def _error(msg: str):
     print(f"[ERROR] {msg}", file=sys.stderr, flush=True)
 
 API_BASE_URL = os.environ.get("API_BASE_URL", "https://router.huggingface.co/v1")
-HF_TOKEN = os.getenv("HF_TOKEN")
-if HF_TOKEN is None:
-    raise ValueError("HF_TOKEN environment variable is required")
+HF_TOKEN = os.getenv("HF_TOKEN") or None
+if not HF_TOKEN:
+    _error(
+        "HF_TOKEN is not set. Export HF_TOKEN=<your-hf-token> to run the LLM "
+        "agent against the HF Inference Router. To verify the environment "
+        "without any key, run `python test_oracle_e2e.py`, or open the live UI "
+        "(`uvicorn app:app --port 7860`) and pick Oracle or Random."
+    )
+    sys.exit(2)
 MODEL_NAME = os.environ.get("MODEL_NAME", "meta-llama/Meta-Llama-3-8B-Instruct")
 ENV_URL = os.environ.get("ENV_URL", "http://localhost:7860")
 
@@ -324,11 +330,10 @@ def run_task(llm_client: OpenAI, env_url: str, task_name: str) -> float:
     log_start(task=task_name, env="PostmortemEnv", model=MODEL_NAME)
 
     try:
-        sync_client = PostmortemClient(base_url=env_url).sync()
-
-        with sync_client:
-            result = sync_client.reset(task_id=task_name)
-            obs = obs_to_dict(result.observation)
+        sync_client = PostmortemClient(base_url=env_url)
+        obs_raw = sync_client.reset(task_id=task_name)
+        obs = obs_to_dict(obs_raw)
+        if True:  # kept to preserve indentation of the former context block
 
             for step_num in range(1, MAX_STEPS + 1):
                 obs_text = format_observation(obs)
@@ -394,7 +399,7 @@ def run_task(llm_client: OpenAI, env_url: str, task_name: str) -> float:
 
             # Get final state for scoring
             try:
-                final_state = sync_client.state()
+                final_state = sync_client.get_state()
                 state_dict = final_state.model_dump() if hasattr(final_state, "model_dump") else vars(final_state)
                 _debug(f"Final state keys: {list(state_dict.keys())}")
             except Exception as e:

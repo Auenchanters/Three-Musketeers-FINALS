@@ -38,7 +38,7 @@
 
 ### Training & Results
 6. **"Is the SFT curve real or simulated?"**
-   → Real. Run on Colab T4 with `meta-llama/Llama-3.2-1B-Instruct` + LoRA. The notebook is `train_notebook.py`, the eval data is in `training_data/sft_eval_results.json`. We deleted the old simulated curve explicitly.
+   → Real. Run on Colab T4 with `meta-llama/Llama-3.2-1B-Instruct` + LoRA. The notebook is `train_notebook.py`; running it end-to-end produces `training_data/sft_eval_results.json` and the `training_data/reward_curves.png` committed in this repo is the saved snapshot from that run. We deleted the old simulated curve explicitly.
 
 7. **"Why SFT and not GRPO?"**
    → SFT alone is sufficient for a real reward curve. GRPO is stretch. We chose to ship honest SFT numbers over fabricated GRPO claims. The GRPO infrastructure is ready in `train.py:327-488` if we had more time.

@@ -280,8 +280,10 @@ class LLMAgent:
             yield {
                 "type": "error",
                 "message": (
-                    f"No API key for provider='{self.provider}'. Set ANTHROPIC_API_KEY "
-                    "or OPENAI_API_KEY (or pass in the request body)."
+                    f"No API key for provider='{self.provider}'. Paste a key in the "
+                    "LLM panel above, or set ANTHROPIC_API_KEY / OPENAI_API_KEY on "
+                    "the server. Tip: Oracle and Random investigators run locally "
+                    "with no key — try one of those to see the environment."
                 ),
             }
             return

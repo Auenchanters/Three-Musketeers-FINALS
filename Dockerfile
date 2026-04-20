@@ -22,7 +22,7 @@ USER user
 EXPOSE 7860
 
 # Health check for automated validator (using Python since slim image lacks curl)
-HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
     CMD python -c "import httpx; r = httpx.get('http://localhost:7860/health'); assert r.status_code == 200" || exit 1
 
 # Run the FastAPI server

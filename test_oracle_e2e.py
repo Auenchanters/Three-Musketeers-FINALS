@@ -49,66 +49,64 @@ def run_oracle_task(env_url, task_id):
 
     log_start(task=task_id, env="PostmortemEnv", model="oracle-solution")
 
-    sync_client = PostmortemClient(base_url=env_url).sync()
+    sync_client = PostmortemClient(base_url=env_url)
     rewards = []
     steps_taken = 0
 
-    with sync_client:
-        result = sync_client.reset(task_id=task_id)
+    obs = sync_client.reset(task_id=task_id)
+    print(f"  Task: {task_id} | Remaining budget: {obs.remaining_budget}", flush=True)
+
+    for i, step_data in enumerate(actions, 1):
+        action = Action(
+            action_type=step_data["action_type"],
+            service=step_data.get("service"),
+            keyword=step_data.get("keyword"),
+            time_window=step_data.get("time_window"),
+            trace_id=step_data.get("trace_id"),
+            commit_hash=step_data.get("commit_hash"),
+            config_id=step_data.get("config_id"),
+            cause_entity_id=step_data.get("cause_entity_id"),
+            chain=step_data.get("chain"),
+            final_cause=step_data.get("final_cause"),
+            final_chain=step_data.get("final_chain"),
+            reason=step_data.get("reason"),
+        )
+
+        result = sync_client.step(action)
         obs = result.observation
-        print(f"  Task: {task_id} | Remaining budget: {obs.remaining_budget}", flush=True)
+        reward = result.reward if isinstance(result.reward, (int, float)) else 0.0
+        done = result.done
+        rewards.append(reward)
+        steps_taken = i
 
-        for i, step_data in enumerate(actions, 1):
-            action = Action(
-                action_type=step_data["action_type"],
-                service=step_data.get("service"),
-                keyword=step_data.get("keyword"),
-                time_window=step_data.get("time_window"),
-                trace_id=step_data.get("trace_id"),
-                commit_hash=step_data.get("commit_hash"),
-                config_id=step_data.get("config_id"),
-                cause_entity_id=step_data.get("cause_entity_id"),
-                chain=step_data.get("chain"),
-                final_cause=step_data.get("final_cause"),
-                final_chain=step_data.get("final_chain"),
-                reason=step_data.get("reason"),
-            )
+        action_dict = {
+            "action_type": step_data["action_type"],
+        }
+        if step_data.get("service"):
+            action_dict["service"] = step_data["service"]
+        if step_data.get("keyword"):
+            action_dict["keyword"] = step_data["keyword"]
+        if step_data.get("commit_hash"):
+            action_dict["commit_hash"] = step_data["commit_hash"]
+        if step_data.get("trace_id"):
+            action_dict["trace_id"] = step_data["trace_id"]
+        if step_data.get("config_id"):
+            action_dict["config_id"] = step_data["config_id"]
+        if step_data.get("cause_entity_id"):
+            action_dict["cause_entity_id"] = step_data["cause_entity_id"]
 
-            result = sync_client.step(action)
-            obs = result.observation
-            reward = result.reward if isinstance(result.reward, (int, float)) else 0.0
-            done = result.done
-            rewards.append(reward)
-            steps_taken = i
+        log_step(step=i, action=action_dict, reward=reward, done=done)
 
-            action_dict = {
-                "action_type": step_data["action_type"],
-            }
-            if step_data.get("service"):
-                action_dict["service"] = step_data["service"]
-            if step_data.get("keyword"):
-                action_dict["keyword"] = step_data["keyword"]
-            if step_data.get("commit_hash"):
-                action_dict["commit_hash"] = step_data["commit_hash"]
-            if step_data.get("trace_id"):
-                action_dict["trace_id"] = step_data["trace_id"]
-            if step_data.get("config_id"):
-                action_dict["config_id"] = step_data["config_id"]
-            if step_data.get("cause_entity_id"):
-                action_dict["cause_entity_id"] = step_data["cause_entity_id"]
+        if done:
+            break
 
-            log_step(step=i, action=action_dict, reward=reward, done=done)
-
-            if done:
-                break
-
-        # Get final score from state
-        try:
-            final_state = sync_client.state()
-            state_dict = final_state.model_dump() if hasattr(final_state, "model_dump") else vars(final_state)
-            score = state_dict.get("final_score", 0.01)
-        except Exception:
-            score = 0.01
+    # Get final score from state
+    try:
+        final_state = sync_client.get_state()
+        state_dict = final_state.model_dump() if hasattr(final_state, "model_dump") else vars(final_state)
+        score = state_dict.get("final_score", 0.01)
+    except Exception:
+        score = 0.01
 
     score = max(0.01, min(0.99, float(score))) if score is not None else 0.01
     success = score >= 0.5

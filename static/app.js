@@ -240,9 +240,17 @@ function subscribe(runId) {
   es.addEventListener("error", (e) => {
     try {
       const data = JSON.parse(e.data);
-      toast(data.message || "stream error", "error");
+      const msg = data.message || "stream error";
+      const isKeyIssue = /api key|unauthor|401|403/i.test(msg);
+      const hint = isKeyIssue
+        ? "Paste a valid key in the LLM panel, or try the Oracle / Random investigator — they run locally with no key."
+        : "Try again, or pick Oracle / Random to see the environment work without a key.";
+      toast(msg, "error", { persist: true });
+      showStreamBanner(msg, hint);
       setStatus("error");
       resetRunButton();
+      es.close();
+      state.eventSource = null;
     } catch {
       /* heartbeat */
     }
@@ -466,19 +474,31 @@ function renderGraph(graph) {
     return;
   }
 
-  // SVG layout — diamond arrangement for 4 services
+  // SVG layout — diamond for the canonical 4-service case, radial otherwise.
   const W = 280, H = 170;
-  const positions = {
+  const diamond = {
     frontend: { x: W/2, y: 20 },
     auth:     { x: W-50, y: H/2 },
     data:     { x: W/2, y: H-20 },
     batch:    { x: 50, y: H/2 },
   };
-  // Fallback for unknown service names
-  const fallbackPositions = [
-    { x: W/2, y: 20 }, { x: W-50, y: H/2 },
-    { x: W/2, y: H-20 }, { x: 50, y: H/2 },
-  ];
+  const isCanonical =
+    services.length === 4 && services.every((s) => s in diamond);
+  const positions = {};
+  if (isCanonical) {
+    Object.assign(positions, diamond);
+  } else {
+    const cx = W / 2, cy = H / 2;
+    const radius = Math.min(W, H) / 2 - 30;
+    services.forEach((svc, i) => {
+      const theta = (2 * Math.PI * i) / services.length - Math.PI / 2;
+      positions[svc] = {
+        x: cx + radius * Math.cos(theta),
+        y: cy + radius * Math.sin(theta),
+      };
+    });
+  }
+  const fallback = { x: W/2, y: H/2 };
 
   const svgNS = "http://www.w3.org/2000/svg";
   const svg = document.createElementNS(svgNS, "svg");
@@ -505,9 +525,9 @@ function renderGraph(graph) {
   // Draw edges
   for (const svc of services) {
     const deps = graph[svc] || [];
-    const from = positions[svc] || fallbackPositions[services.indexOf(svc)] || { x: W/2, y: H/2 };
+    const from = positions[svc] || fallback;
     for (const dep of deps) {
-      const to = positions[dep] || fallbackPositions[services.indexOf(dep)] || { x: W/2, y: H/2 };
+      const to = positions[dep] || fallback;
       const line = document.createElementNS(svgNS, "line");
       line.setAttribute("x1", from.x);
       line.setAttribute("y1", from.y);
@@ -524,7 +544,7 @@ function renderGraph(graph) {
   const nodeW = 70, nodeH = 24;
   for (let i = 0; i < services.length; i++) {
     const svc = services[i];
-    const pos = positions[svc] || fallbackPositions[i] || { x: W/2, y: H/2 };
+    const pos = positions[svc] || fallback;
     const g = document.createElementNS(svgNS, "g");
     g.classList.add("svc-group");
     g.dataset.svc = svc;
@@ -656,19 +676,34 @@ function clearEmptyState() {
   if (empty) empty.remove();
 }
 
-function toast(msg, kind = "") {
+function toast(msg, kind = "", opts = {}) {
   const el = $("inlineStatus");
   if (!el) return;
   const prefix = kind === "error" ? "ERROR" : kind === "ok" ? "OK" : "INFO";
   el.dataset.kind = kind || "info";
   el.textContent = `[${prefix}] ${msg}`;
   clearTimeout(toast._timer);
+  if (opts.persist) return;
   toast._timer = setTimeout(() => {
     if (el.textContent.includes(msg)) {
       el.textContent = "";
       el.dataset.kind = "";
     }
   }, 6000);
+}
+
+function showStreamBanner(message, hint) {
+  const body = $("streamBody");
+  if (!body) return;
+  body.innerHTML = "";
+  const banner = document.createElement("div");
+  banner.className = "stream-banner";
+  banner.innerHTML = `
+    <div class="stream-banner-label">[ ERROR ]</div>
+    <div class="stream-banner-msg">${escapeHtml(message)}</div>
+    ${hint ? `<div class="stream-banner-hint">${escapeHtml(hint)}</div>` : ""}
+  `;
+  body.appendChild(banner);
 }
 
 function shortTaskName(tid) {

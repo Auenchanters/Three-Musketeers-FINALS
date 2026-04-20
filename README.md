@@ -26,7 +26,7 @@ tags:
 > *Theme 3.1: World Modeling (Professional) | Meta PyTorch OpenEnv Hackathon Apr '26*
 > *By Three Musketeers (Utkarsh, Mohit, Tanush)*
 
-| 📹 [Demo Video](#) | 📝 [HF Blog Post](#) | 🤗 [Live Space](https://huggingface.co/spaces/three-musketeers/PostmortemEnv) |
+| 📹 *Demo Video (coming soon)* | 📝 *HF Blog Post (coming soon)* | 🤗 [Live Space](https://huggingface.co/spaces/three-musketeers/PostmortemEnv) |
 |---|---|---|
 
 ---
@@ -81,7 +81,7 @@ The agent sees a 4-service microservice architecture with a dependency graph. Ea
 | Cascade Chain | Medium | 75 | Batch OOM cascades through all 4 services |
 | Correlated Root Cause | Hard | 120 | Auth failover bug + network degradation combine |
 
-Each task has hand-crafted realistic telemetry, plus a **procedural seed generator** that creates unlimited unique scenarios from 5 failure templates. Validated: **10,000 seeds → 10,000 unique scenarios, 0 failures, 1,371 scenarios/sec**.
+Each task has hand-crafted realistic telemetry, plus a **procedural seed generator** that creates unlimited unique scenarios from 5 failure templates. Validated: **10,000 seeds → 10,000 unique scenarios, 0 failures**. Measured throughput: ~1K scen/sec (generation only) / ~400 scen/sec with full oracle validation pass.
 
 ## Reward Design
 
@@ -130,7 +130,7 @@ The full SFT pipeline runs on a free Colab T4 GPU via [train_notebook.py](train_
 - **Epochs**: 3, batch size 2, lr 2e-5
 - **Eval**: 10 held-out seeds per difficulty (separate seed namespace)
 
-After training, `training_data/reward_curves.png` is overwritten with a **real** Random vs SFT vs Oracle chart from `training_data/sft_eval_results.json`. The SFT-trained model must beat the random baseline to validate the environment's trainability.
+Running `train_notebook.py` end-to-end on Colab produces `training_data/sft_eval_results.json` and refreshes `training_data/reward_curves.png` with a **real** Random vs SFT vs Oracle chart. The committed `reward_curves.png` is the saved snapshot from that run (the JSON is a transient notebook output, regenerated each run rather than checked in). The SFT-trained model must beat the random baseline to validate the environment's trainability.
 
 ## Quick Start
 
