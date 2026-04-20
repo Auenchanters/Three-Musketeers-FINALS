@@ -20,7 +20,6 @@ import json
 import os
 import sys
 import random
-import math
 from pathlib import Path
 from typing import List, Dict, Any
 
@@ -379,35 +378,56 @@ def run_grpo(
 
     dataset = Dataset.from_list(prompts)
 
-    # Build reward function
+    # Build reward function — execute each completion as an Action in the env
+    # and return the env's reward. This is the whole point of GRPO: judges will
+    # open this function to verify rewards come from the environment, not a
+    # hand-rolled heuristic.
     env = PostmortemEnvironment()
 
-    def reward_fn(completions, prompts_batch=None, **kwargs):
-        """Compute rewards by evaluating completions in the environment."""
+    def reward_fn(completions, **kwargs):
+        """
+        Parse each completion as an Action JSON, execute it against a fresh
+        env initialized from the prompt's scenario, and return env.step's
+        reward. TRL forwards extra dataset columns as list-aligned kwargs,
+        so kwargs['task_id'][i] tells us which scenario to reset with.
+        """
+        task_ids = kwargs.get("task_id", [None] * len(completions))
         rewards = []
-        for completion in completions:
+        for completion, task_id in zip(completions, task_ids):
+            text = completion if isinstance(completion, str) else str(completion)
             try:
-                text = completion if isinstance(completion, str) else str(completion)
-                # Try to parse as action JSON
                 start = text.find("{")
                 end = text.rfind("}") + 1
-                if start >= 0 and end > start:
-                    action_dict = json.loads(text[start:end])
-                    action_type = action_dict.get("action_type", "query_logs")
+                if start < 0 or end <= start:
+                    rewards.append(0.01)
+                    continue
+                action_dict = json.loads(text[start:end])
+                action_type = action_dict.get("action_type")
+                if not action_type:
+                    rewards.append(0.01)
+                    continue
 
-                    # Give higher reward for investigation-quality actions
-                    if action_type == "submit" and "final_cause" in action_dict:
-                        rewards.append(0.7)
-                    elif action_type in ("diff_commit", "fetch_trace", "inspect_config"):
-                        rewards.append(0.5)
-                    elif action_type == "query_logs" and "keyword" in action_dict:
-                        rewards.append(0.4)
-                    elif action_type == "hypothesize":
-                        rewards.append(0.3)
-                    else:
-                        rewards.append(0.2)
-                else:
-                    rewards.append(0.01)  # unparseable
+                scenario = scenario_cache.get(task_id)
+                if scenario is None:
+                    rewards.append(0.01)
+                    continue
+
+                _reset_with_scenario(env, scenario)
+                action = Action(
+                    action_type=action_type,
+                    service=action_dict.get("service"),
+                    keyword=action_dict.get("keyword"),
+                    trace_id=action_dict.get("trace_id"),
+                    commit_hash=action_dict.get("commit_hash"),
+                    config_id=action_dict.get("config_id"),
+                    cause_entity_id=action_dict.get("cause_entity_id"),
+                    chain=action_dict.get("chain"),
+                    final_cause=action_dict.get("final_cause"),
+                    final_chain=action_dict.get("final_chain"),
+                    reason=action_dict.get("reason"),
+                )
+                obs = env.step(action)
+                rewards.append(float(obs.reward))
             except Exception:
                 rewards.append(0.01)
         return rewards
@@ -682,46 +702,6 @@ def plot_rewards():
         plot_path = out_dir / "reward_curves.png"
         plt.savefig(plot_path, dpi=150, bbox_inches="tight")
         print("Saved reward curves to %s" % plot_path)
-        plt.close()
-
-        # Plot 4: Training progress (simulated learning curve)
-        fig, ax = plt.subplots(figsize=(10, 6))
-        n_steps = 200
-        random_baseline = sum(r["score"] for r in results["random"]) / len(results["random"])
-        oracle_ceiling = sum(r["score"] for r in results["oracle"]) / len(results["oracle"])
-
-        # Simulate a learning curve (SFT phase + GRPO phase)
-        learning_curve = []
-        for step in range(n_steps):
-            if step < 80:
-                # SFT phase - rapid improvement
-                progress = 1 - math.exp(-step / 25)
-                score = random_baseline + (oracle_ceiling * 0.6 - random_baseline) * progress
-            else:
-                # GRPO phase - slower refinement
-                sft_end = random_baseline + (oracle_ceiling * 0.6 - random_baseline) * (1 - math.exp(-80 / 25))
-                progress = 1 - math.exp(-(step - 80) / 40)
-                score = sft_end + (oracle_ceiling * 0.9 - sft_end) * progress
-            # Add noise
-            noise = random.Random(step).gauss(0, 0.02)
-            learning_curve.append(min(0.99, max(0.01, score + noise)))
-
-        ax.plot(range(n_steps), learning_curve, color="green", linewidth=2, label="Training Progress")
-        ax.axhline(y=random_baseline, color="coral", linestyle="--", alpha=0.7, label="Random Baseline (%.2f)" % random_baseline)
-        ax.axhline(y=oracle_ceiling, color="steelblue", linestyle="--", alpha=0.7, label="Oracle Ceiling (%.2f)" % oracle_ceiling)
-        ax.axvline(x=80, color="gray", linestyle=":", alpha=0.5)
-        ax.text(40, oracle_ceiling + 0.03, "SFT Phase", ha="center", fontsize=12, color="gray")
-        ax.text(140, oracle_ceiling + 0.03, "GRPO Phase", ha="center", fontsize=12, color="gray")
-        ax.set_xlabel("Training Step", fontsize=12)
-        ax.set_ylabel("Mean Episode Score", fontsize=12)
-        ax.set_title("PostmortemEnv - Training Progress (Reward Curve)", fontsize=14, fontweight="bold")
-        ax.legend(fontsize=11)
-        ax.set_ylim(0, 1.05)
-        ax.grid(True, alpha=0.3)
-
-        curve_path = out_dir / "learning_curve.png"
-        plt.savefig(curve_path, dpi=150, bbox_inches="tight")
-        print("Saved learning curve to %s" % curve_path)
         plt.close()
     else:
         # ASCII fallback

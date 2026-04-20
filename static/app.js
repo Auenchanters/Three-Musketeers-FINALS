@@ -310,6 +310,12 @@ function onStep(ev) {
     });
   }
 
+  // Animate service graph — light up queried services
+  const queriedSvc = action.service;
+  if (queriedSvc) {
+    highlightGraphNode(queriedSvc, "queried");
+  }
+
   // Side panel updates
   const stepsUsed = state.maxSteps - observation.remaining_budget;
   updateBudget(stepsUsed, state.maxSteps);
@@ -364,6 +370,11 @@ function onDone(ev) {
   updateScore(ev.score, ev.steps);
   setStatus(ev.score >= 0.70 ? "done" : "error");
   resetRunButton();
+
+  // Animate the causal cascade on the service graph
+  if (ev.chain && ev.chain.length) {
+    showCascadeOnGraph(ev.chain, ev.cause);
+  }
 
   const summary = document.createElement("div");
   summary.className = "step-card terminal";
@@ -454,22 +465,127 @@ function renderGraph(graph) {
     el.innerHTML = '<span class="muted">no graph</span>';
     return;
   }
+
+  // SVG layout — diamond arrangement for 4 services
+  const W = 280, H = 170;
+  const positions = {
+    frontend: { x: W/2, y: 20 },
+    auth:     { x: W-50, y: H/2 },
+    data:     { x: W/2, y: H-20 },
+    batch:    { x: 50, y: H/2 },
+  };
+  // Fallback for unknown service names
+  const fallbackPositions = [
+    { x: W/2, y: 20 }, { x: W-50, y: H/2 },
+    { x: W/2, y: H-20 }, { x: 50, y: H/2 },
+  ];
+
+  const svgNS = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(svgNS, "svg");
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  svg.classList.add("graph-svg");
+
+  // Arrowhead marker
+  const defs = document.createElementNS(svgNS, "defs");
+  const marker = document.createElementNS(svgNS, "marker");
+  marker.setAttribute("id", "arrowhead");
+  marker.setAttribute("viewBox", "0 0 10 7");
+  marker.setAttribute("refX", "9");
+  marker.setAttribute("refY", "3.5");
+  marker.setAttribute("markerWidth", "8");
+  marker.setAttribute("markerHeight", "6");
+  marker.setAttribute("orient", "auto");
+  const arrowPath = document.createElementNS(svgNS, "polygon");
+  arrowPath.setAttribute("points", "0 0, 10 3.5, 0 7");
+  arrowPath.setAttribute("fill", "#333");
+  marker.appendChild(arrowPath);
+  defs.appendChild(marker);
+  svg.appendChild(defs);
+
+  // Draw edges
   for (const svc of services) {
-    const n = document.createElement("span");
-    n.className = "node";
-    n.textContent = svc;
-    n.dataset.svc = svc;
-    el.appendChild(n);
     const deps = graph[svc] || [];
-    if (deps.length) {
-      const arrow = document.createElement("span");
-      arrow.className = "edge";
-      arrow.textContent = " → ";
-      el.appendChild(arrow);
-      el.appendChild(document.createTextNode(deps.join(", ")));
+    const from = positions[svc] || fallbackPositions[services.indexOf(svc)] || { x: W/2, y: H/2 };
+    for (const dep of deps) {
+      const to = positions[dep] || fallbackPositions[services.indexOf(dep)] || { x: W/2, y: H/2 };
+      const line = document.createElementNS(svgNS, "line");
+      line.setAttribute("x1", from.x);
+      line.setAttribute("y1", from.y);
+      line.setAttribute("x2", to.x);
+      line.setAttribute("y2", to.y);
+      line.classList.add("svc-edge");
+      line.dataset.from = svc;
+      line.dataset.to = dep;
+      svg.appendChild(line);
     }
-    el.appendChild(document.createElement("br"));
   }
+
+  // Draw nodes
+  const nodeW = 70, nodeH = 24;
+  for (let i = 0; i < services.length; i++) {
+    const svc = services[i];
+    const pos = positions[svc] || fallbackPositions[i] || { x: W/2, y: H/2 };
+    const g = document.createElementNS(svgNS, "g");
+    g.classList.add("svc-group");
+    g.dataset.svc = svc;
+
+    const rect = document.createElementNS(svgNS, "rect");
+    rect.setAttribute("x", pos.x - nodeW/2);
+    rect.setAttribute("y", pos.y - nodeH/2);
+    rect.setAttribute("width", nodeW);
+    rect.setAttribute("height", nodeH);
+    rect.setAttribute("rx", "4");
+    rect.classList.add("svc-node");
+    g.appendChild(rect);
+
+    const label = document.createElementNS(svgNS, "text");
+    label.setAttribute("x", pos.x);
+    label.setAttribute("y", pos.y);
+    label.classList.add("svc-label");
+    label.textContent = svc;
+    g.appendChild(label);
+
+    svg.appendChild(g);
+  }
+
+  el.appendChild(svg);
+}
+
+function highlightGraphNode(serviceName, type) {
+  // type: "queried" | "root-cause" | "in-chain"
+  const svg = document.querySelector(".graph-svg");
+  if (!svg) return;
+  const group = svg.querySelector(`.svc-group[data-svc="${serviceName}"]`);
+  if (group && !group.classList.contains("root-cause")) {
+    group.classList.add(type);
+  }
+}
+
+function highlightGraphEdge(from, to) {
+  const svg = document.querySelector(".graph-svg");
+  if (!svg) return;
+  const edge = svg.querySelector(`.svc-edge[data-from="${from}"][data-to="${to}"]`);
+  if (edge) edge.classList.add("active");
+  // Also check reverse direction
+  const rev = svg.querySelector(`.svc-edge[data-from="${to}"][data-to="${from}"]`);
+  if (rev) rev.classList.add("active");
+}
+
+function showCascadeOnGraph(chain, cause) {
+  // Highlight root cause node
+  if (cause && chain.length > 0) {
+    const rootSvc = chain[0].service;
+    highlightGraphNode(rootSvc, "root-cause");
+  }
+  // Highlight chain nodes and edges with staggered delay
+  chain.forEach((link, i) => {
+    setTimeout(() => {
+      highlightGraphNode(link.service, "in-chain");
+      if (i > 0) {
+        highlightGraphEdge(chain[i-1].service, link.service);
+      }
+    }, i * 300);
+  });
 }
 
 // --------------------------------------------------------------------- helpers

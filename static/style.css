@@ -905,10 +905,95 @@ html, body {
   font-family: var(--font-mono);
   font-size: var(--label);
   color: var(--text-secondary);
-  overflow-x: auto;
+  overflow: visible;
   letter-spacing: 0.04em;
   line-height: 2.0;
 }
+
+/* -- SVG animated graph -- */
+.graph-svg {
+  width: 100%;
+  height: 180px;
+  display: block;
+}
+.graph-svg .svc-node {
+  fill: var(--surface-raised);
+  stroke: var(--border-visible);
+  stroke-width: 1.5;
+  rx: 4;
+  transition: fill 400ms ease, stroke 400ms ease, filter 400ms ease;
+}
+.graph-svg .svc-label {
+  fill: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-anchor: middle;
+  dominant-baseline: central;
+  pointer-events: none;
+  text-transform: uppercase;
+}
+.graph-svg .svc-edge {
+  stroke: var(--border-visible);
+  stroke-width: 1.5;
+  fill: none;
+  marker-end: url(#arrowhead);
+  transition: stroke 400ms ease, stroke-width 400ms ease;
+}
+.graph-svg .svc-status {
+  fill: var(--text-disabled);
+  font-family: var(--font-mono);
+  font-size: 8px;
+  letter-spacing: 0.06em;
+  text-anchor: middle;
+  dominant-baseline: hanging;
+  pointer-events: none;
+  transition: fill 400ms ease;
+}
+
+/* States */
+.graph-svg .svc-group.queried .svc-node {
+  stroke: var(--text-display);
+  stroke-width: 2;
+  filter: drop-shadow(0 0 6px rgba(255,255,255,0.15));
+}
+.graph-svg .svc-group.queried .svc-label { fill: var(--text-display); }
+.graph-svg .svc-group.queried .svc-status { fill: var(--text-primary); }
+
+.graph-svg .svc-group.root-cause .svc-node {
+  fill: var(--accent-subtle);
+  stroke: var(--accent);
+  stroke-width: 2.5;
+  filter: drop-shadow(0 0 10px rgba(215,25,33,0.3));
+  animation: root-pulse 2s ease-in-out infinite;
+}
+.graph-svg .svc-group.root-cause .svc-label { fill: var(--accent); }
+.graph-svg .svc-group.root-cause .svc-status { fill: var(--accent); }
+
+.graph-svg .svc-group.in-chain .svc-node {
+  stroke: var(--warning);
+  stroke-width: 2;
+  filter: drop-shadow(0 0 6px rgba(212,168,67,0.2));
+}
+.graph-svg .svc-group.in-chain .svc-label { fill: var(--warning); }
+
+.graph-svg .svc-edge.active {
+  stroke: var(--warning);
+  stroke-width: 2.5;
+  stroke-dasharray: 6 3;
+  animation: dash-flow 1s linear infinite;
+}
+
+@keyframes root-pulse {
+  0%, 100% { filter: drop-shadow(0 0 6px rgba(215,25,33,0.2)); }
+  50%      { filter: drop-shadow(0 0 14px rgba(215,25,33,0.5)); }
+}
+@keyframes dash-flow {
+  to { stroke-dashoffset: -18; }
+}
+
+/* -- Fallback text graph (kept for accessibility) -- */
 .graph .node {
   display: inline-block;
   padding: 2px var(--space-sm);
@@ -918,10 +1003,21 @@ html, body {
   font-size: var(--label);
   font-weight: 700;
   letter-spacing: 0.06em;
+  transition: all 300ms ease;
 }
 .graph .node.highlight {
   color: var(--black);
   background: var(--text-display);
   border-color: var(--text-display);
 }
+.graph .node.queried {
+  border-color: var(--text-display);
+  color: var(--text-display);
+}
+.graph .node.root-cause {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-subtle);
+}
 .graph .edge { color: var(--text-disabled); margin: 0 var(--space-xs); }
+

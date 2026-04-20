@@ -15,7 +15,7 @@ Design:
 import json
 import random
 import hashlib
-from typing import Dict, List, Any, Tuple
+from typing import Dict, List, Any, Optional, Tuple
 from pathlib import Path
 from datetime import datetime, timedelta, timezone
 
@@ -674,7 +674,7 @@ def generate_oracle_solution(scenario: Dict[str, Any], seed: int) -> Dict[str, A
 
 def generate_batch(
     n_per_difficulty: int = 10,
-    output_dir: str | None = None,
+    output_dir: Optional[str] = None,
 ) -> Dict[str, List[Dict[str, Any]]]:
     """
     Generate a batch of scenarios.
