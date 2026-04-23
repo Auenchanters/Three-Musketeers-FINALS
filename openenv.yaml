@@ -12,6 +12,8 @@ tags:
   - incident-investigation
   - epistemic-rl
   - root-cause-analysis
+license: "MIT"
+repo: "https://github.com/Auenchanters/Three-Musketeers-FINALS"
 
 observation_model: models.observation.Observation
 action_model: models.action.Action

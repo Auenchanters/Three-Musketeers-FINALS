@@ -716,17 +716,36 @@ def plot_rewards():
 
 def _average_rewards(agent_results):
     """Average cumulative rewards across episodes."""
-    max_len = max(len(r["rewards"]) for r in agent_results) if agent_results else 0
+    if not agent_results:
+        return []
+        
+    # First, calculate cumulative rewards for each episode independently
+    cumulative_episodes = []
+    max_len = 0
+    for r in agent_results:
+        rewards = r.get("rewards", [])
+        if not rewards:
+            cumulative_episodes.append([])
+            continue
+        
+        max_len = max(max_len, len(rewards))
+        cum_list = []
+        current_sum = 0
+        for val in rewards:
+            current_sum += val
+            cum_list.append(current_sum)
+        cumulative_episodes.append(cum_list)
+        
+    # Then average the cumulative sums across episodes step by step
     avg = []
     for step in range(max_len):
         vals = []
-        cum = 0
-        for r in agent_results:
-            if step < len(r["rewards"]):
-                cum += r["rewards"][step]
-                vals.append(cum)
-            elif r["rewards"]:
-                vals.append(sum(r["rewards"]))
+        for ep_cum in cumulative_episodes:
+            if step < len(ep_cum):
+                vals.append(ep_cum[step])
+            elif ep_cum:
+                # If the episode finished early, carry over its final cumulative score
+                vals.append(ep_cum[-1])
         avg.append(sum(vals) / len(vals) if vals else 0)
     return avg
 

@@ -46,7 +46,7 @@ async def manifest() -> dict:
         "name": "PostmortemEnv",
         "short_name": "PostmortemEnv",
         "description": "Epistemic RL environment for cloud outage investigation",
-        "version": "1.1.0",
+        "version": "1.0.0",
         "endpoints": {
             "openenv": ["/health", "/reset", "/step", "/state", "/schema", "/ws"],
             "live": ["/api/tasks", "/api/curriculum", "/api/runs", "/api/stream/{run_id}"],

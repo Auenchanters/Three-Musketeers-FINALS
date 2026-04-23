@@ -333,78 +333,76 @@ def run_task(llm_client: OpenAI, env_url: str, task_name: str) -> float:
         sync_client = PostmortemClient(base_url=env_url)
         obs_raw = sync_client.reset(task_id=task_name)
         obs = obs_to_dict(obs_raw)
-        if True:  # kept to preserve indentation of the former context block
 
-            for step_num in range(1, MAX_STEPS + 1):
-                obs_text = format_observation(obs)
+        for step_num in range(1, MAX_STEPS + 1):
+            obs_text = format_observation(obs)
 
-                # Safety net: force submit on last step
-                task_max_steps = obs.get("max_steps", MAX_STEPS)
-                remaining = obs.get("remaining_budget", task_max_steps - obs.get("step_number", 0))
+            # Safety net: force submit on last step
+            task_max_steps = obs.get("max_steps", MAX_STEPS)
+            remaining = obs.get("remaining_budget", task_max_steps - obs.get("step_number", 0))
 
-                if remaining <= 1:
-                    _info(f"Auto-submitting on step {step_num} (last step safety net)")
-                    # Submit with best guess from known facts
-                    action_text = '{"action_type": "submit", "final_cause": "unknown", "final_chain": [], "reason": "Budget exhausted"}'
-                    action_dict = parse_action(action_text)
-                else:
-                    action_text = get_agent_action(llm_client, obs_text, history, parse_failures)
-                    action_dict = parse_action(action_text)
+            if remaining <= 1:
+                _info(f"Auto-submitting on step {step_num} (last step safety net)")
+                action_text = '{"action_type": "submit", "final_cause": "unknown", "final_chain": [], "reason": "Budget exhausted"}'
+                action_dict = parse_action(action_text)
+            else:
+                action_text = get_agent_action(llm_client, obs_text, history, parse_failures)
+                action_dict = parse_action(action_text)
 
-                # Track parse failures
-                if action_dict.get("reason", "").startswith("Parse failure"):
-                    parse_failures += 1
-                else:
-                    parse_failures = 0
+            # Track parse failures
+            if action_dict.get("reason", "").startswith("Parse failure"):
+                parse_failures += 1
+            else:
+                parse_failures = 0
 
-                if parse_failures >= 3:
-                    _warn("3 consecutive parse failures — submitting to save progress.")
-                    action_dict = {"action_type": "submit", "final_cause": "unknown", "final_chain": [], "reason": "Parse failure bailout"}
-                    parse_failures = 0
+            if parse_failures >= 3:
+                _warn("3 consecutive parse failures — submitting to save progress.")
+                action_dict = {"action_type": "submit", "final_cause": "unknown", "final_chain": [], "reason": "Parse failure bailout"}
+                parse_failures = 0
 
-                # Build typed Action
-                action = Action(
-                    action_type=action_dict.get("action_type", "query_logs"),
-                    service=action_dict.get("service"),
-                    keyword=action_dict.get("keyword"),
-                    time_window=action_dict.get("time_window"),
-                    trace_id=action_dict.get("trace_id"),
-                    commit_hash=action_dict.get("commit_hash"),
-                    config_id=action_dict.get("config_id"),
-                    cause_entity_id=action_dict.get("cause_entity_id"),
-                    chain=action_dict.get("chain"),
-                    final_cause=action_dict.get("final_cause"),
-                    final_chain=action_dict.get("final_chain"),
-                    reason=action_dict.get("reason"),
-                )
+            # Build typed Action
+            action = Action(
+                action_type=action_dict.get("action_type", "query_logs"),
+                service=action_dict.get("service"),
+                keyword=action_dict.get("keyword"),
+                time_window=action_dict.get("time_window"),
+                trace_id=action_dict.get("trace_id"),
+                commit_hash=action_dict.get("commit_hash"),
+                config_id=action_dict.get("config_id"),
+                cause_entity_id=action_dict.get("cause_entity_id"),
+                chain=action_dict.get("chain"),
+                final_cause=action_dict.get("final_cause"),
+                final_chain=action_dict.get("final_chain"),
+                reason=action_dict.get("reason"),
+            )
 
-                result = sync_client.step(action)
-                obs = obs_to_dict(result.observation)
-                reward = result.reward if isinstance(result.reward, (int, float)) else 0.0
-                done = result.done
-                rewards.append(reward)
+            result = sync_client.step(action)
+            obs = obs_to_dict(result.observation)
+            reward = result.reward if isinstance(result.reward, (int, float)) else 0.0
+            done = result.done
+            rewards.append(reward)
 
-                obs_msg = obs.get("message", "")
-                step_error = obs_msg if ("INCORRECT" in obs_msg or "not found" in obs_msg.lower()) else None
+            obs_msg = obs.get("message", "")
+            step_error = obs_msg if ("INCORRECT" in obs_msg or "not found" in obs_msg.lower()) else None
 
-                log_step(step=step_num, action=action_dict, reward=reward, done=done, error=step_error)
+            log_step(step=step_num, action=action_dict, reward=reward, done=done, error=step_error)
 
-                history.append({
-                    "action": action_text,
-                    "result": obs.get("query_result", obs_msg),
-                })
+            history.append({
+                "action": action_text,
+                "result": obs.get("query_result", obs_msg),
+            })
 
-                if done:
-                    break
+            if done:
+                break
 
-            # Get final state for scoring
-            try:
-                final_state = sync_client.get_state()
-                state_dict = final_state.model_dump() if hasattr(final_state, "model_dump") else vars(final_state)
-                _debug(f"Final state keys: {list(state_dict.keys())}")
-            except Exception as e:
-                _error(f"Failed to get final state: {e}")
-                state_dict = {}
+        # Get final state for scoring
+        try:
+            final_state = sync_client.get_state()
+            state_dict = final_state.model_dump() if hasattr(final_state, "model_dump") else vars(final_state)
+            _debug(f"Final state keys: {list(state_dict.keys())}")
+        except Exception as e:
+            _error(f"Failed to get final state: {e}")
+            state_dict = {}
 
         # Use server-computed score if available
         final_score = state_dict.get("final_score")

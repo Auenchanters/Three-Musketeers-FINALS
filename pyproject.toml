@@ -11,7 +11,7 @@ authors = [
 ]
 dependencies = [
     "pydantic>=2.4.0",
-    "openenv-core>=0.2.0",
+    "openenv-core>=0.1.0",
     "fastapi>=0.104.0",
     "uvicorn>=0.23.0",
     "websockets>=11.0",
@@ -27,3 +27,8 @@ dev = [
     "pytest>=7.4.2",
     "httpx>=0.25.0"
 ]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-v --tb=short"
