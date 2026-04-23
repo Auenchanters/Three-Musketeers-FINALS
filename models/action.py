@@ -7,13 +7,14 @@ from openenv.core.env_server.types import Action as BaseAction
 
 
 class ActionType(str, Enum):
-    """The 7 investigation actions available to the agent."""
+    """The investigation and mitigation actions available to the agent."""
     QUERY_LOGS = "query_logs"
     FETCH_TRACE = "fetch_trace"
     DIFF_COMMIT = "diff_commit"
     INSPECT_CONFIG = "inspect_config"
     HYPOTHESIZE = "hypothesize"
     EXPLAIN_CHAIN = "explain_chain"
+    MITIGATE = "mitigate"
     SUBMIT = "submit"
 
 
@@ -30,6 +31,7 @@ class Action(BaseAction):
     - inspect_config: config_id
     - hypothesize: cause_entity_id
     - explain_chain: chain (ordered list of {service, effect})
+    - mitigate: mitigate_target
     - submit: final_cause, final_chain
     """
     action_type: ActionType = Field(description="The type of investigation action to perform")
@@ -56,6 +58,9 @@ class Action(BaseAction):
         default=None,
         description="Ordered causal chain: [{service, effect}, ...]"
     )
+
+    # mitigate parameters
+    mitigate_target: Optional[str] = Field(default=None, description="Target entity ID to mitigate (e.g. 'commit-abc123')")
 
     # submit parameters
     final_cause: Optional[str] = Field(default=None, description="Final root cause entity ID")

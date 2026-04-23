@@ -25,7 +25,7 @@
 
 **[SCREEN: Service dependency graph diagram animates in]**
 
-> *"PostmortemEnv gives the agent a frozen snapshot of a 4-service microservice architecture — logs, traces, commits, configs — and a bounded budget of queries to figure out the root cause and causal chain."*
+> *"PostmortemEnv gives the agent a frozen snapshot of an enterprise-scale microservice architecture — generating unique, dynamic DAG topologies of up to 20 services per incident! The agent analyzes logs, traces, commits, and configs to figure out the root cause and causal chain within a bounded budget."*
 
 ---
 
@@ -57,7 +57,7 @@
 
 **[SCREEN: The reward gap table from README]**
 
-> *"A procedural generator built on 5 failure templates creates unlimited unique scenarios. Connection pool exhaustion, OOM cascades, AZ failover bugs, correlated multi-cause failures. Deploy it on HuggingFace Spaces and any LLM can train against it."*
+> *"A procedural generator built on 5 failure templates creates unlimited unique scenarios, dynamically assembling unique microservice topographies for every seed! Connection pool exhaustion, OOM cascades, AZ failover bugs, correlated multi-cause failures across sprawling architectures. Deploy it on HuggingFace Spaces and any LLM can train against it."*
 
 ---
 

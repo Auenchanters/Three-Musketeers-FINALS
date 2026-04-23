@@ -3,45 +3,49 @@
 from typing import List, Dict, Optional
 
 
-def _normalized_edit_distance(predicted: List[Dict[str, str]], actual: List[Dict[str, str]]) -> float:
+def _compute_graph_similarity(predicted: List[Dict[str, str]], actual: List[Dict[str, str]]) -> float:
     """
-    Compute normalized edit distance between two causal chains.
+    Compute structural graph similarity between two causal chains.
 
-    Each chain element is a dict with 'service' and 'effect' keys.
-    We compare the (service, effect) tuples using Levenshtein-style DP.
+    Each chain is interpreted as a sequence of nodes: [A -> B -> C].
+    We compute the Jaccard similarity of both the individual nodes (service, effect)
+    and the directed edges between them.
 
-    Returns a value in [0.0, 1.0] where 0.0 = identical, 1.0 = completely different.
+    Returns a value in [0.0, 1.0] where 1.0 = identical, 0.0 = completely different.
     """
     if not actual:
-        return 0.0 if not predicted else 1.0
+        return 1.0 if not predicted else 0.0
     if not predicted:
-        return 1.0
+        return 0.0
 
-    # Convert to comparable tuples
-    pred_tuples = [(s.get("service", ""), s.get("effect", "")) for s in predicted]
-    act_tuples = [(s.get("service", ""), s.get("effect", "")) for s in actual]
+    # Extract nodes
+    pred_nodes = set((s.get("service", ""), s.get("effect", "")) for s in predicted)
+    act_nodes = set((s.get("service", ""), s.get("effect", "")) for s in actual)
+    
+    # Extract edges (bigrams)
+    pred_edges = set()
+    for i in range(len(predicted) - 1):
+        n1 = (predicted[i].get("service", ""), predicted[i].get("effect", ""))
+        n2 = (predicted[i+1].get("service", ""), predicted[i+1].get("effect", ""))
+        pred_edges.add((n1, n2))
+        
+    act_edges = set()
+    for i in range(len(actual) - 1):
+        n1 = (actual[i].get("service", ""), actual[i].get("effect", ""))
+        n2 = (actual[i+1].get("service", ""), actual[i+1].get("effect", ""))
+        act_edges.add((n1, n2))
 
-    m, n = len(pred_tuples), len(act_tuples)
-    dp = [[0] * (n + 1) for _ in range(m + 1)]
-
-    for i in range(m + 1):
-        dp[i][0] = i
-    for j in range(n + 1):
-        dp[0][j] = j
-
-    for i in range(1, m + 1):
-        for j in range(1, n + 1):
-            if pred_tuples[i - 1] == act_tuples[j - 1]:
-                dp[i][j] = dp[i - 1][j - 1]
-            else:
-                dp[i][j] = 1 + min(
-                    dp[i - 1][j],      # deletion
-                    dp[i][j - 1],      # insertion
-                    dp[i - 1][j - 1],  # substitution
-                )
-
-    max_len = max(m, n)
-    return dp[m][n] / max_len if max_len > 0 else 0.0
+    # Compute node Jaccard similarity (weight: 0.4)
+    nodes_intersection = len(pred_nodes.intersection(act_nodes))
+    nodes_union = len(pred_nodes.union(act_nodes))
+    node_sim = nodes_intersection / nodes_union if nodes_union > 0 else 0.0
+    
+    # Compute edge Jaccard similarity (weight: 0.6)
+    edges_intersection = len(pred_edges.intersection(act_edges))
+    edges_union = len(pred_edges.union(act_edges))
+    edge_sim = edges_intersection / edges_union if edges_union > 0 else 1.0 if not act_edges and not pred_edges else 0.0
+    
+    return 0.4 * node_sim + 0.6 * edge_sim
 
 
 class Grader:
@@ -56,7 +60,7 @@ class Grader:
 
     Where:
         - is_correct_cause: 1 if submitted cause matches ground truth, else 0
-        - chain_similarity: 1 - normalized_edit_distance(predicted, actual)
+        - chain_similarity: compute_graph_similarity(predicted, actual)
         - efficiency_bonus: max(0, 1 - steps_used / max_steps)
         - n_wrong_hypotheses: count of incorrect hypothesize calls
 
@@ -108,8 +112,8 @@ class Grader:
         if predicted_chain is None:
             return 0.0
 
-        edit_dist = _normalized_edit_distance(predicted_chain, actual_chain)
-        return max(0.0, min(1.0, 1.0 - edit_dist))
+        similarity = _compute_graph_similarity(predicted_chain, actual_chain)
+        return max(0.0, min(1.0, similarity))
 
     @staticmethod
     def compute_final_score(

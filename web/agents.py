@@ -261,15 +261,18 @@ class LLMAgent:
         max_tokens: int = 180,
     ) -> None:
         self.provider = (provider or os.getenv("LLM_PROVIDER", "anthropic")).lower()
-        self.model = model or os.getenv(
-            "LLM_MODEL",
-            "claude-haiku-4-5-20251001" if self.provider == "anthropic" else "gpt-4o-mini",
-        )
-        self.api_key = api_key or (
-            os.getenv("ANTHROPIC_API_KEY")
-            if self.provider == "anthropic"
-            else os.getenv("OPENAI_API_KEY")
-        )
+        if self.provider == "anthropic":
+            default_model = "claude-haiku-4-5-20251001"
+            default_key = os.getenv("ANTHROPIC_API_KEY")
+        elif self.provider == "moonshot":
+            default_model = "moonshot-v1-8k" # fallback or kimi-k2.6 based on env
+            default_key = os.getenv("MOONSHOT_API_KEY")
+        else:
+            default_model = "gpt-4o-mini"
+            default_key = os.getenv("OPENAI_API_KEY")
+            
+        self.model = model or os.getenv("LLM_MODEL", default_model)
+        self.api_key = api_key or default_key
         self.max_tokens = max_tokens
         self.agent_id = f"llm:{self.model}"
 
@@ -370,6 +373,8 @@ class LLMAgent:
     async def _complete(self, messages: list[dict[str, Any]]) -> tuple[str, dict[str, int]]:
         if self.provider == "anthropic":
             return await self._complete_anthropic(messages)
+        elif self.provider == "moonshot":
+            return await self._complete_moonshot(messages)
         return await self._complete_openai(messages)
 
     async def _complete_anthropic(
@@ -465,6 +470,38 @@ class LLMAgent:
             "cache_creation_tokens": 0,
         }
 
+
+    async def _complete_moonshot(
+        self, messages: list[dict[str, Any]]
+    ) -> tuple[str, dict[str, int]]:
+        import httpx
+
+        full = [{"role": "system", "content": SYSTEM_PROMPT}] + messages
+        payload = {
+            "model": self.model,
+            "messages": full,
+            "max_tokens": self.max_tokens,
+            "temperature": 0.2,
+            "response_format": {"type": "json_object"},
+        }
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json",
+        }
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            resp = await client.post(
+                "https://api.moonshot.cn/v1/chat/completions", json=payload, headers=headers
+            )
+            resp.raise_for_status()
+            data = resp.json()
+        text = data["choices"][0]["message"]["content"]
+        usage = data.get("usage", {})
+        return text.strip(), {
+            "input_tokens": int(usage.get("prompt_tokens", 0)),
+            "output_tokens": int(usage.get("completion_tokens", 0)),
+            "cache_read_tokens": 0,
+            "cache_creation_tokens": 0,
+        }
 
 def _parse_action_json(raw: str) -> dict[str, Any]:
     """Extract the first valid JSON object from a model response."""
