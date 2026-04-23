@@ -46,7 +46,7 @@ r_terminal = 0.5 * is_correct_cause
            - 0.1 * n_wrong_hypotheses
 ```
 
-Where `chain_similarity` uses Levenshtein edit distance between the predicted and actual causal chains, and `efficiency_bonus = max(0, 1 - steps_used / max_steps)`. All scores are clamped to (0.01, 0.99) for validator compliance.
+Where `chain_similarity` uses Jaccard overlap on directed node/edge sets between the predicted and actual causal chains, and `efficiency_bonus = max(0, 1 - steps_used / max_steps)`. All scores are clamped to (0.01, 0.99) for validator compliance.
 
 Dense per-step rewards prevent sparse-reward exploration collapse:
 - **+0.05** per relevant fact discovered (information gain)
@@ -60,9 +60,9 @@ Evaluated on 10 seeds per difficulty (`python train.py evaluate --n-seeds 10`):
 
 | Agent | Easy | Medium | Hard | Overall |
 |---|---|---|---|---|
-| Random | 0.099 | 0.094 | 0.108 | **0.101** |
+| Random | 0.099 | 0.095 | 0.108 | **0.101** |
 | Oracle | 0.967 | 0.981 | 0.989 | **0.979** |
-| **Gap** | **0.868** | **0.887** | **0.881** | **0.878** |
+| **Gap** | **0.868** | **0.886** | **0.881** | **0.878** |
 
 The 0.88 gap between random and oracle is the training headroom. SFT on `meta-llama/Llama-3.2-1B-Instruct` with LoRA on 60 oracle demonstrations is run on a Colab T4 to produce a real reward curve — the trained model must beat random to validate the environment.
 

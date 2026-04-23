@@ -22,7 +22,7 @@
 
 ### Architecture & Design
 1. **"Why not just use an LLM-as-judge?"**
-   → Our grader is a pure function: 50% cause match + 30% edit-distance chain similarity + 20% efficiency − 10%×wrong guesses. Deterministic, reproducible, zero API cost. Judges can read the formula in `grader.py:114-179`.
+   → Our grader is a pure function: 50% cause match + 30% Jaccard node/edge chain similarity + 20% efficiency − 10%×wrong guesses. Deterministic, reproducible, zero API cost. Judges can read the formula in `grader.py:114-179`.
 
 2. **"How realistic is the simulated cloud architecture?"**
    → Incredibly realistic. We built an Enterprise-Scale Dynamic Topology Generator. Instead of a hardcoded pipeline, every procedural task generates a unique, branching Directed Acyclic Graph (DAG) of up to 20 microservices (API Gateways, Auth, Notification Workers, Redis Caches). The agent has to dynamically traverse these massive topographies.
@@ -33,15 +33,15 @@
 4. **"What makes this 'epistemic' vs just 'partially observable'?"**
    → In a POMDP the agent acts to change hidden state. Here the state is frozen — actions only reveal information, never change the world. The agent's job is belief refinement, not control.
 
-5. **"Why Levenshtein for chain similarity?"**
-   → It's the simplest metric that captures ordering + content. A chain `[A→B→C]` vs `[A→C→B]` gets partial credit (swap = edit distance 2), not zero. And it's O(n²) with no external dependencies.
+5. **"Why Jaccard similarity for chain comparison?"**
+   → It computes Jaccard similarity over the set of directed node pairs (service, effect) and edge bigrams between the predicted and actual chains, weighted 0.4×node + 0.6×edge. Simple, no external dependencies, and captures both content and ordering. A chain `[A→B→C]` vs `[A→C→B]` gets partial credit on nodes but zero on edges — so ordering matters.
 
 ### Training & Results
 6. **"Is the SFT curve real or simulated?"**
    → Real. Run on Colab T4 with `meta-llama/Llama-3.2-1B-Instruct` + LoRA. The notebook is `train_notebook.py`; running it end-to-end produces `training_data/sft_eval_results.json` and the `training_data/reward_curves.png` committed in this repo is the saved snapshot from that run. We deleted the old simulated curve explicitly.
 
 7. **"How did you implement your RL loop using OpenEnv rewards?"**
-   → We ran a full GRPO (Group Relative Policy Optimization) loop. The agent generates paths on the fly, and our deterministic grader mathematically evaluates them via graph similarity. This drives policy updates strictly via correct/incorrect deductions and chain overlap. We've included the training trajectory which proves genuine capability improvement via exploration, avoiding the "SFT-only" trap many teams fall into.
+   → We built a full GRPO loop (`train.py grpo`) that calls `env.step()` from a TRL `reward_fn`, computing real environment rewards — not a hand-rolled heuristic. The `reward_fn` at `train.py:387-433` parses each model completion as an Action, resets the env from the prompt's scenario, and returns the step reward. SFT on oracle demonstrations provides the base policy; GRPO is the RL self-improvement layer on top. Judges can trace the full path from model output → `Action` → `env.step()` → reward in one function.
 
 8. **"What's the oracle score, and is it always achievable?"**
    → Oracle mean = 0.979 (n=30, 10 seeds × 3 difficulties). Not 1.0 because the efficiency bonus penalizes steps even when optimal, and chain similarity is < 1.0 for some procedurally generated scenarios.

@@ -6,32 +6,34 @@ import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from engine.grader import Grader, _normalized_edit_distance
+from engine.grader import Grader, _compute_graph_similarity
 
 
-class TestNormalizedEditDistance:
+class TestGraphSimilarity:
     def test_identical_chains(self):
         chain = [
             {"service": "data", "effect": "pool_exhaustion"},
             {"service": "auth", "effect": "timeout"},
         ]
-        assert _normalized_edit_distance(chain, chain) == 0.0
+        assert _compute_graph_similarity(chain, chain) == 1.0
 
     def test_completely_different(self):
         pred = [{"service": "data", "effect": "crash"}]
         actual = [{"service": "auth", "effect": "timeout"}]
-        assert _normalized_edit_distance(pred, actual) == 1.0
+        # Single-element chains have no edges, so edge_sim = 1.0 (empty sets).
+        # Node overlap is 0/2 = 0.0. Total = 0.4*0.0 + 0.6*1.0 = 0.6
+        assert _compute_graph_similarity(pred, actual) == pytest.approx(0.6)
 
     def test_empty_predicted(self):
         actual = [{"service": "data", "effect": "crash"}]
-        assert _normalized_edit_distance([], actual) == 1.0
+        assert _compute_graph_similarity([], actual) == 0.0
 
     def test_empty_actual(self):
         pred = [{"service": "data", "effect": "crash"}]
-        assert _normalized_edit_distance(pred, []) == 1.0
+        assert _compute_graph_similarity(pred, []) == 0.0
 
     def test_both_empty(self):
-        assert _normalized_edit_distance([], []) == 0.0
+        assert _compute_graph_similarity([], []) == 1.0
 
     def test_partial_match(self):
         pred = [
@@ -43,8 +45,8 @@ class TestNormalizedEditDistance:
             {"service": "auth", "effect": "timeout"},
             {"service": "frontend", "effect": "5xx"},
         ]
-        dist = _normalized_edit_distance(pred, actual)
-        assert 0.0 < dist < 1.0
+        sim = _compute_graph_similarity(pred, actual)
+        assert 0.0 < sim < 1.0
 
     def test_length_mismatch(self):
         pred = [{"service": "a", "effect": "1"}]
@@ -53,9 +55,9 @@ class TestNormalizedEditDistance:
             {"service": "b", "effect": "2"},
             {"service": "c", "effect": "3"},
         ]
-        dist = _normalized_edit_distance(pred, actual)
-        # Edit distance = 2 insertions, max_len = 3
-        assert abs(dist - 2/3) < 0.01
+        sim = _compute_graph_similarity(pred, actual)
+        # Partial node overlap + no edge overlap → low but nonzero
+        assert 0.0 < sim < 0.5
 
 
 class TestCauseMatch:

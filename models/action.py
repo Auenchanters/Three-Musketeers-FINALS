@@ -14,7 +14,6 @@ class ActionType(str, Enum):
     INSPECT_CONFIG = "inspect_config"
     HYPOTHESIZE = "hypothesize"
     EXPLAIN_CHAIN = "explain_chain"
-    MITIGATE = "mitigate"
     SUBMIT = "submit"
 
 
@@ -31,7 +30,6 @@ class Action(BaseAction):
     - inspect_config: config_id
     - hypothesize: cause_entity_id
     - explain_chain: chain (ordered list of {service, effect})
-    - mitigate: mitigate_target
     - submit: final_cause, final_chain
     """
     action_type: ActionType = Field(description="The type of investigation action to perform")
@@ -59,8 +57,6 @@ class Action(BaseAction):
         description="Ordered causal chain: [{service, effect}, ...]"
     )
 
-    # mitigate parameters
-    mitigate_target: Optional[str] = Field(default=None, description="Target entity ID to mitigate (e.g. 'commit-abc123')")
 
     # submit parameters
     final_cause: Optional[str] = Field(default=None, description="Final root cause entity ID")
