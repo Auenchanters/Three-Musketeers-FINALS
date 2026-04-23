@@ -75,8 +75,13 @@ FAILURE_TEMPLATES = {
     },
 }
 
-# Realistic names and components
-SERVICE_NAMES = ["frontend", "auth", "data", "batch"]
+SERVICE_NAMES_POOL = [
+    "api-gateway", "auth-service", "user-profile", "cart-service", 
+    "checkout", "payment-gateway", "inventory-db", "pricing-engine", 
+    "catalog-service", "recommendation", "search-index", "notification-worker", 
+    "email-sender", "metrics-collector", "log-aggregator", "fraud-detector",
+    "shipping-service", "order-manager", "webhook-dispatcher", "redis-cache"
+]
 DEVELOPER_NAMES = ["alice", "bob", "carol", "dave", "eve", "frank", "grace", "heidi"]
 CONFIG_KEYS = [
     "MAX_CONNECTIONS", "POOL_SIZE", "TIMEOUT_MS", "RETRY_COUNT",
@@ -118,6 +123,62 @@ INFRA_EVENT_TYPES = [
     "scaling_event", "storage_migration", "kernel_update", "load_balancer_drain",
 ]
 
+
+def _generate_service_dag(rng: random.Random, n_services: int) -> Tuple[List[str], Dict[str, List[str]]]:
+    """Generates a random directed acyclic graph of services."""
+    services = rng.sample(SERVICE_NAMES_POOL, n_services)
+    
+    # We want a DAG where traffic generally flows from index 0 to index N
+    service_graph = {s: [] for s in services}
+    
+    # Create a connected backbone
+    for i in range(n_services - 1):
+        target = rng.randint(i + 1, min(i + 3, n_services - 1))
+        service_graph[services[i]].append(services[target])
+        
+    # Add random cross edges
+    n_extra_edges = int(n_services * 0.5)
+    for _ in range(n_extra_edges):
+        u_idx = rng.randint(0, n_services - 2)
+        v_idx = rng.randint(u_idx + 1, n_services - 1)
+        u, v = services[u_idx], services[v_idx]
+        if v not in service_graph[u]:
+            service_graph[u].append(v)
+            
+    return services, service_graph
+
+def _find_upstream_path(service_graph: Dict[str, List[str]], target: str) -> List[str]:
+    """Find a causal path from some root node down to the target."""
+    memo = {}
+    def can_reach(node):
+        if node == target: return True
+        if node in memo: return memo[node]
+        res = any(can_reach(child) for child in service_graph[node])
+        memo[node] = res
+        return res
+        
+    def get_path(node):
+        if node == target: return [node]
+        valid_children = [c for c in service_graph[node] if can_reach(c)]
+        if not valid_children: return []
+        return [node] + get_path(valid_children[0])
+        
+    in_degrees = {s: 0 for s in service_graph}
+    for u, edges in service_graph.items():
+        for v in edges:
+            in_degrees[v] += 1
+            
+    roots = [s for s, d in in_degrees.items() if d == 0]
+    valid_roots = [r for r in roots if can_reach(r)]
+    
+    if valid_roots:
+        path = get_path(valid_roots[0])
+        # We need the path reversed (target -> upstreams) for the cascading chain templates
+        path.reverse()
+        # upstreams are everything after target
+        return path[1:]
+    
+    return []
 
 def _hash_seed(seed: int, salt: str = "") -> str:
     """Deterministic hash for generating IDs."""
@@ -444,25 +505,24 @@ def generate_scenario(seed: int, difficulty: str = "easy") -> Dict[str, Any]:
 
     template = FAILURE_TEMPLATES[template_name]
 
-    # Pick target service and build dependency order
-    services = list(SERVICE_NAMES)
-    target_idx = rng.randint(0, 3)
+    # Determine topology size based on difficulty
+    if difficulty == "easy":
+        n_services = rng.randint(4, 6)
+    elif difficulty == "medium":
+        n_services = rng.randint(8, 12)
+    else:  # hard
+        n_services = rng.randint(15, 20)
+
+    # Generate dynamic DAG
+    services, service_graph = _generate_service_dag(rng, n_services)
+
+    # Pick target service (prefer one that isn't a root node if possible, 
+    # to guarantee some upstream propagation, though the pathfinder handles roots fine)
+    target_idx = rng.randint(0, len(services) - 1)
     target_service = services[target_idx]
 
-    # Build graph (always same structure: frontend → auth → data → batch)
-    service_graph = {
-        "frontend": ["auth"],
-        "auth": ["data"],
-        "data": ["batch"],
-        "batch": [],
-    }
-
-    # Find upstream services
-    upstreams = []
-    chain_order = ["batch", "data", "auth", "frontend"]
-    target_pos = chain_order.index(target_service)
-    for s in chain_order[target_pos + 1:]:
-        upstreams.append(s)
+    # Find upstream services dynamically based on graph reachability
+    upstreams = _find_upstream_path(service_graph, target_service)
 
     # Incident time
     base_date = datetime(2026, 4, rng.randint(10, 20), rng.randint(0, 23), rng.randint(0, 59), tzinfo=timezone.utc)

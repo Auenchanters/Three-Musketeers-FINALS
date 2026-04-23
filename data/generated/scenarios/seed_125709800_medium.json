@@ -1,0 +1,2765 @@
+{
+  "task_id": "seed_125709800_medium",
+  "task_difficulty": "medium",
+  "task_description": "A cascading outage affected all services starting at 15:12 UTC. The 'email-sender' service crashed repeatedly, propagating failures through the dependency chain.",
+  "max_steps": 75,
+  "service_graph": {
+    "recommendation": [
+      "fraud-detector",
+      "order-manager"
+    ],
+    "payment-gateway": [
+      "checkout"
+    ],
+    "fraud-detector": [
+      "notification-worker",
+      "redis-cache"
+    ],
+    "redis-cache": [
+      "notification-worker"
+    ],
+    "checkout": [
+      "metrics-collector"
+    ],
+    "notification-worker": [
+      "api-gateway"
+    ],
+    "api-gateway": [
+      "order-manager",
+      "user-profile"
+    ],
+    "metrics-collector": [
+      "order-manager"
+    ],
+    "order-manager": [
+      "user-profile"
+    ],
+    "email-sender": [
+      "user-profile"
+    ],
+    "user-profile": []
+  },
+  "services": [
+    {
+      "name": "recommendation",
+      "status": "healthy",
+      "dependencies": [
+        "fraud-detector",
+        "order-manager"
+      ],
+      "recent_deploy_count": 2,
+      "error_rate_during_incident": 14.9
+    },
+    {
+      "name": "payment-gateway",
+      "status": "healthy",
+      "dependencies": [
+        "checkout"
+      ],
+      "recent_deploy_count": 3,
+      "error_rate_during_incident": 19.3
+    },
+    {
+      "name": "fraud-detector",
+      "status": "degraded",
+      "dependencies": [
+        "notification-worker",
+        "redis-cache"
+      ],
+      "recent_deploy_count": 0,
+      "error_rate_during_incident": 16.2
+    },
+    {
+      "name": "redis-cache",
+      "status": "healthy",
+      "dependencies": [
+        "notification-worker"
+      ],
+      "recent_deploy_count": 1,
+      "error_rate_during_incident": 8.5
+    },
+    {
+      "name": "checkout",
+      "status": "healthy",
+      "dependencies": [
+        "metrics-collector"
+      ],
+      "recent_deploy_count": 0,
+      "error_rate_during_incident": 10.4
+    },
+    {
+      "name": "notification-worker",
+      "status": "degraded",
+      "dependencies": [
+        "api-gateway"
+      ],
+      "recent_deploy_count": 0,
+      "error_rate_during_incident": 24.9
+    },
+    {
+      "name": "api-gateway",
+      "status": "healthy",
+      "dependencies": [
+        "order-manager",
+        "user-profile"
+      ],
+      "recent_deploy_count": 1,
+      "error_rate_during_incident": 25.5
+    },
+    {
+      "name": "metrics-collector",
+      "status": "degraded",
+      "dependencies": [
+        "order-manager"
+      ],
+      "recent_deploy_count": 0,
+      "error_rate_during_incident": 0.6
+    },
+    {
+      "name": "order-manager",
+      "status": "degraded",
+      "dependencies": [
+        "user-profile"
+      ],
+      "recent_deploy_count": 0,
+      "error_rate_during_incident": 28.1
+    },
+    {
+      "name": "email-sender",
+      "status": "down",
+      "dependencies": [
+        "user-profile"
+      ],
+      "recent_deploy_count": 2,
+      "error_rate_during_incident": 86.1
+    },
+    {
+      "name": "user-profile",
+      "status": "healthy",
+      "dependencies": [],
+      "recent_deploy_count": 1,
+      "error_rate_during_incident": 14.2
+    }
+  ],
+  "incident_window": {
+    "start": "2026-04-13T15:12:00Z",
+    "end": "2026-04-13T15:30:00Z"
+  },
+  "logs": {
+    "recommendation": [
+      {
+        "id": "log-rec-125709800-000",
+        "timestamp": "2026-04-12T15:12:00Z",
+        "level": "INFO",
+        "message": "Cache warmer completed, 4751 keys refreshed",
+        "relevant": false
+      },
+      {
+        "id": "log-rec-125709800-001",
+        "timestamp": "2026-04-12T16:34:06Z",
+        "level": "INFO",
+        "message": "Cache warmer completed, 2097 keys refreshed",
+        "relevant": false
+      },
+      {
+        "id": "log-rec-125709800-002",
+        "timestamp": "2026-04-12T17:56:12Z",
+        "level": "DEBUG",
+        "message": "Deployment v3.12.4 rolled out successfully",
+        "relevant": false
+      },
+      {
+        "id": "log-rec-125709800-003",
+        "timestamp": "2026-04-12T19:18:18Z",
+        "level": "INFO",
+        "message": "Connection pool utilization: 31%",
+        "relevant": false
+      },
+      {
+        "id": "log-rec-125709800-004",
+        "timestamp": "2026-04-12T20:40:25Z",
+        "level": "INFO",
+        "message": "Cache warmer completed, 2167 keys refreshed",
+        "relevant": false
+      },
+      {
+        "id": "log-rec-125709800-005",
+        "timestamp": "2026-04-12T22:02:31Z",
+        "level": "DEBUG",
+        "message": "Cache warmer completed, 1375 keys refreshed",
+        "relevant": false
+      },
+      {
+        "id": "log-rec-125709800-006",
+        "timestamp": "2026-04-12T23:24:37Z",
+        "level": "INFO",
+        "message": "Scheduled maintenance task completed",
+        "relevant": false
+      },
+      {
+        "id": "log-rec-125709800-007",
+        "timestamp": "2026-04-13T00:46:44Z",
+        "level": "INFO",
+        "message": "Health check passed, all endpoints responding",
+        "relevant": false
+      },
+      {
+        "id": "log-rec-125709800-008",
+        "timestamp": "2026-04-13T02:08:50Z",
+        "level": "INFO",
+        "message": "Connection pool utilization: 35%",
+        "relevant": false
+      },
+      {
+        "id": "log-rec-125709800-009",
+        "timestamp": "2026-04-13T03:30:56Z",
+        "level": "INFO",
+        "message": "Deployment v5.6.7 rolled out successfully",
+        "relevant": false
+      },
+      {
+        "id": "log-rec-125709800-010",
+        "timestamp": "2026-04-13T04:53:03Z",
+        "level": "WARN",
+        "message": "Connection pool utilization: 26%",
+        "relevant": false
+      },
+      {
+        "id": "log-rec-125709800-011",
+        "timestamp": "2026-04-13T06:15:09Z",
+        "level": "INFO",
+        "message": "Log rotation completed, 18 files archived",
+        "relevant": false
+      },
+      {
+        "id": "log-rec-125709800-012",
+        "timestamp": "2026-04-13T07:37:15Z",
+        "level": "ERROR",
+        "message": "Error rate crossed 20% threshold",
+        "relevant": false
+      },
+      {
+        "id": "log-rec-125709800-013",
+        "timestamp": "2026-04-13T08:59:22Z",
+        "level": "ERROR",
+        "message": "Retry budget exhausted for recommendation dependency",
+        "relevant": false
+      },
+      {
+        "id": "log-rec-125709800-014",
+        "timestamp": "2026-04-13T10:21:28Z",
+        "level": "WARN",
+        "message": "Fallback cache serving stale data",
+        "relevant": false
+      },
+      {
+        "id": "log-rec-125709800-015",
+        "timestamp": "2026-04-13T11:43:34Z",
+        "level": "INFO",
+        "message": "Retry budget exhausted for recommendation dependency",
+        "relevant": false
+      },
+      {
+        "id": "log-rec-125709800-016",
+        "timestamp": "2026-04-13T13:05:41Z",
+        "level": "ERROR",
+        "message": "Retry budget exhausted for recommendation dependency",
+        "relevant": false
+      },
+      {
+        "id": "log-rec-125709800-017",
+        "timestamp": "2026-04-13T14:27:47Z",
+        "level": "INFO",
+        "message": "Error rate crossed 7% threshold",
+        "relevant": false
+      },
+      {
+        "id": "log-rec-125709800-018",
+        "timestamp": "2026-04-13T15:49:53Z",
+        "level": "ERROR",
+        "message": "Error rate crossed 5% threshold",
+        "relevant": false
+      }
+    ],
+    "payment-gateway": [
+      {
+        "id": "log-pay-125709800-000",
+        "timestamp": "2026-04-12T15:12:00Z",
+        "level": "INFO",
+        "message": "Cache warmer completed, 2488 keys refreshed",
+        "relevant": false
+      },
+      {
+        "id": "log-pay-125709800-001",
+        "timestamp": "2026-04-12T16:34:06Z",
+        "level": "DEBUG",
+        "message": "Scheduled maintenance task completed",
+        "relevant": false
+      },
+      {
+        "id": "log-pay-125709800-002",
+        "timestamp": "2026-04-12T17:56:12Z",
+        "level": "DEBUG",
+        "message": "Connection pool utilization: 41%",
+        "relevant": false
+      },
+      {
+        "id": "log-pay-125709800-003",
+        "timestamp": "2026-04-12T19:18:18Z",
+        "level": "INFO",
+        "message": "Scheduled maintenance task completed",
+        "relevant": false
+      },
+      {
+        "id": "log-pay-125709800-004",
+        "timestamp": "2026-04-12T20:40:25Z",
+        "level": "INFO",
+        "message": "Cache warmer completed, 2817 keys refreshed",
+        "relevant": false
+      },
+      {
+        "id": "log-pay-125709800-005",
+        "timestamp": "2026-04-12T22:02:31Z",
+        "level": "INFO",
+        "message": "Health check passed, all endpoints responding",
+        "relevant": false
+      },
+      {
+        "id": "log-pay-125709800-006",
+        "timestamp": "2026-04-12T23:24:37Z",
+        "level": "INFO",
+        "message": "Log rotation completed, 15 files archived",
+        "relevant": false
+      },
+      {
+        "id": "log-pay-125709800-007",
+        "timestamp": "2026-04-13T00:46:44Z",
+        "level": "INFO",
+        "message": "Health check passed, all endpoints responding",
+        "relevant": false
+      },
+      {
+        "id": "log-pay-125709800-008",
+        "timestamp": "2026-04-13T02:08:50Z",
+        "level": "INFO",
+        "message": "Request processing nominal, latency p99=34ms",
+        "relevant": false
+      },
+      {
+        "id": "log-pay-125709800-009",
+        "timestamp": "2026-04-13T03:30:56Z",
+        "level": "INFO",
+        "message": "Connection pool utilization: 18%",
+        "relevant": false
+      },
+      {
+        "id": "log-pay-125709800-010",
+        "timestamp": "2026-04-13T04:53:03Z",
+        "level": "INFO",
+        "message": "Cache warmer completed, 3296 keys refreshed",
+        "relevant": false
+      },
+      {
+        "id": "log-pay-125709800-011",
+        "timestamp": "2026-04-13T06:15:09Z",
+        "level": "INFO",
+        "message": "Log rotation completed, 16 files archived",
+        "relevant": false
+      },
+      {
+        "id": "log-pay-125709800-012",
+        "timestamp": "2026-04-13T07:37:15Z",
+        "level": "INFO",
+        "message": "Retry budget exhausted for payment-gateway dependency",
+        "relevant": true
+      },
+      {
+        "id": "log-pay-125709800-013",
+        "timestamp": "2026-04-13T08:59:22Z",
+        "level": "WARN",
+        "message": "Error rate crossed 14% threshold",
+        "relevant": false
+      },
+      {
+        "id": "log-pay-125709800-014",
+        "timestamp": "2026-04-13T10:21:28Z",
+        "level": "INFO",
+        "message": "Retry budget exhausted for payment-gateway dependency",
+        "relevant": false
+      },
+      {
+        "id": "log-pay-125709800-015",
+        "timestamp": "2026-04-13T11:43:34Z",
+        "level": "INFO",
+        "message": "Error rate crossed 7% threshold",
+        "relevant": false
+      },
+      {
+        "id": "log-pay-125709800-016",
+        "timestamp": "2026-04-13T13:05:41Z",
+        "level": "ERROR",
+        "message": "Fallback cache serving stale data",
+        "relevant": false
+      },
+      {
+        "id": "log-pay-125709800-017",
+        "timestamp": "2026-04-13T14:27:47Z",
+        "level": "ERROR",
+        "message": "Retry budget exhausted for payment-gateway dependency",
+        "relevant": false
+      },
+      {
+        "id": "log-pay-125709800-018",
+        "timestamp": "2026-04-13T15:49:53Z",
+        "level": "WARN",
+        "message": "Error rate crossed 19% threshold",
+        "relevant": false
+      }
+    ],
+    "fraud-detector": [
+      {
+        "id": "log-fra-125709800-000",
+        "timestamp": "2026-04-12T15:12:00Z",
+        "level": "INFO",
+        "message": "Request processing nominal, latency p99=169ms",
+        "relevant": false
+      },
+      {
+        "id": "log-fra-125709800-001",
+        "timestamp": "2026-04-12T16:34:06Z",
+        "level": "DEBUG",
+        "message": "Cache warmer completed, 4069 keys refreshed",
+        "relevant": false
+      },
+      {
+        "id": "log-fra-125709800-002",
+        "timestamp": "2026-04-12T17:56:12Z",
+        "level": "DEBUG",
+        "message": "Connection pool utilization: 47%",
+        "relevant": false
+      },
+      {
+        "id": "log-fra-125709800-003",
+        "timestamp": "2026-04-12T19:18:18Z",
+        "level": "INFO",
+        "message": "Connection pool utilization: 50%",
+        "relevant": false
+      },
+      {
+        "id": "log-fra-125709800-004",
+        "timestamp": "2026-04-12T20:40:25Z",
+        "level": "WARN",
+        "message": "Log rotation completed, 11 files archived",
+        "relevant": false
+      },
+      {
+        "id": "log-fra-125709800-005",
+        "timestamp": "2026-04-12T22:02:31Z",
+        "level": "INFO",
+        "message": "Scheduled maintenance task completed",
+        "relevant": false
+      },
+      {
+        "id": "log-fra-125709800-006",
+        "timestamp": "2026-04-12T23:24:37Z",
+        "level": "INFO",
+        "message": "Health check passed, all endpoints responding",
+        "relevant": false
+      },
+      {
+        "id": "log-fra-125709800-007",
+        "timestamp": "2026-04-13T00:46:44Z",
+        "level": "INFO",
+        "message": "Health check passed, all endpoints responding",
+        "relevant": false
+      },
+      {
+        "id": "log-fra-125709800-008",
+        "timestamp": "2026-04-13T02:08:50Z",
+        "level": "DEBUG",
+        "message": "Connection pool utilization: 42%",
+        "relevant": false
+      },
+      {
+        "id": "log-fra-125709800-009",
+        "timestamp": "2026-04-13T03:30:56Z",
+        "level": "DEBUG",
+        "message": "Cache warmer completed, 4985 keys refreshed",
+        "relevant": false
+      },
+      {
+        "id": "log-fra-125709800-010",
+        "timestamp": "2026-04-13T04:53:03Z",
+        "level": "WARN",
+        "message": "Health check passed, all endpoints responding",
+        "relevant": false
+      },
+      {
+        "id": "log-fra-125709800-011",
+        "timestamp": "2026-04-13T06:15:09Z",
+        "level": "WARN",
+        "message": "Scheduled maintenance task completed",
+        "relevant": false
+      },
+      {
+        "id": "log-fra-125709800-012",
+        "timestamp": "2026-04-13T07:37:15Z",
+        "level": "INFO",
+        "message": "Upstream fraud-detector returning 503 errors",
+        "relevant": false
+      },
+      {
+        "id": "log-fra-125709800-013",
+        "timestamp": "2026-04-13T08:59:22Z",
+        "level": "WARN",
+        "message": "Error rate crossed 18% threshold",
+        "relevant": true
+      },
+      {
+        "id": "log-fra-125709800-014",
+        "timestamp": "2026-04-13T10:21:28Z",
+        "level": "ERROR",
+        "message": "Retry budget exhausted for fraud-detector dependency",
+        "relevant": false
+      },
+      {
+        "id": "log-fra-125709800-015",
+        "timestamp": "2026-04-13T11:43:34Z",
+        "level": "ERROR",
+        "message": "Error rate crossed 7% threshold",
+        "relevant": false
+      },
+      {
+        "id": "log-fra-125709800-016",
+        "timestamp": "2026-04-13T13:05:41Z",
+        "level": "WARN",
+        "message": "Upstream fraud-detector returning 503 errors",
+        "relevant": true
+      },
+      {
+        "id": "log-fra-125709800-017",
+        "timestamp": "2026-04-13T14:27:47Z",
+        "level": "INFO",
+        "message": "Error rate crossed 18% threshold",
+        "relevant": true
+      },
+      {
+        "id": "log-fra-125709800-018",
+        "timestamp": "2026-04-13T15:49:53Z",
+        "level": "ERROR",
+        "message": "Elevated latency on fraud-detector-dependent routes: 2545ms",
+        "relevant": true
+      }
+    ],
+    "redis-cache": [
+      {
+        "id": "log-red-125709800-000",
+        "timestamp": "2026-04-12T15:12:00Z",
+        "level": "DEBUG",
+        "message": "Cache warmer completed, 4095 keys refreshed",
+        "relevant": false
+      },
+      {
+        "id": "log-red-125709800-001",
+        "timestamp": "2026-04-12T16:34:06Z",
+        "level": "INFO",
+        "message": "Cache warmer completed, 3470 keys refreshed",
+        "relevant": false
+      },
+      {
+        "id": "log-red-125709800-002",
+        "timestamp": "2026-04-12T17:56:12Z",
+        "level": "WARN",
+        "message": "Cache warmer completed, 4194 keys refreshed",
+        "relevant": false
+      },
+      {
+        "id": "log-red-125709800-003",
+        "timestamp": "2026-04-12T19:18:18Z",
+        "level": "WARN",
+        "message": "Request processing nominal, latency p99=72ms",
+        "relevant": false
+      },
+      {
+        "id": "log-red-125709800-004",
+        "timestamp": "2026-04-12T20:40:25Z",
+        "level": "INFO",
+        "message": "Request processing nominal, latency p99=71ms",
+        "relevant": false
+      },
+      {
+        "id": "log-red-125709800-005",
+        "timestamp": "2026-04-12T22:02:31Z",
+        "level": "INFO",
+        "message": "Cache warmer completed, 1144 keys refreshed",
+        "relevant": false
+      },
+      {
+        "id": "log-red-125709800-006",
+        "timestamp": "2026-04-12T23:24:37Z",
+        "level": "INFO",
+        "message": "Deployment v5.17.3 rolled out successfully",
+        "relevant": false
+      },
+      {
+        "id": "log-red-125709800-007",
+        "timestamp": "2026-04-13T00:46:44Z",
+        "level": "WARN",
+        "message": "Cache warmer completed, 4351 keys refreshed",
+        "relevant": false
+      },
+      {
+        "id": "log-red-125709800-008",
+        "timestamp": "2026-04-13T02:08:50Z",
+        "level": "WARN",
+        "message": "Cache warmer completed, 1053 keys refreshed",
+        "relevant": false
+      },
+      {
+        "id": "log-red-125709800-009",
+        "timestamp": "2026-04-13T03:30:56Z",
+        "level": "WARN",
+        "message": "Cache warmer completed, 2440 keys refreshed",
+        "relevant": false
+      },
+      {
+        "id": "log-red-125709800-010",
+        "timestamp": "2026-04-13T04:53:03Z",
+        "level": "DEBUG",
+        "message": "Cache warmer completed, 3017 keys refreshed",
+        "relevant": false
+      },
+      {
+        "id": "log-red-125709800-011",
+        "timestamp": "2026-04-13T06:15:09Z",
+        "level": "DEBUG",
+        "message": "Deployment v1.11.1 rolled out successfully",
+        "relevant": false
+      },
+      {
+        "id": "log-red-125709800-012",
+        "timestamp": "2026-04-13T07:37:15Z",
+        "level": "WARN",
+        "message": "Error rate crossed 20% threshold",
+        "relevant": false
+      },
+      {
+        "id": "log-red-125709800-013",
+        "timestamp": "2026-04-13T08:59:22Z",
+        "level": "ERROR",
+        "message": "Elevated latency on redis-cache-dependent routes: 4010ms",
+        "relevant": false
+      },
+      {
+        "id": "log-red-125709800-014",
+        "timestamp": "2026-04-13T10:21:28Z",
+        "level": "WARN",
+        "message": "Error rate crossed 20% threshold",
+        "relevant": true
+      },
+      {
+        "id": "log-red-125709800-015",
+        "timestamp": "2026-04-13T11:43:34Z",
+        "level": "WARN",
+        "message": "Upstream redis-cache returning 504 errors",
+        "relevant": true
+      },
+      {
+        "id": "log-red-125709800-016",
+        "timestamp": "2026-04-13T13:05:41Z",
+        "level": "INFO",
+        "message": "Fallback cache serving stale data",
+        "relevant": false
+      },
+      {
+        "id": "log-red-125709800-017",
+        "timestamp": "2026-04-13T14:27:47Z",
+        "level": "INFO",
+        "message": "Error rate crossed 12% threshold",
+        "relevant": false
+      },
+      {
+        "id": "log-red-125709800-018",
+        "timestamp": "2026-04-13T15:49:53Z",
+        "level": "INFO",
+        "message": "Error rate crossed 20% threshold",
+        "relevant": false
+      }
+    ],
+    "checkout": [
+      {
+        "id": "log-che-125709800-000",
+        "timestamp": "2026-04-12T15:12:00Z",
+        "level": "INFO",
+        "message": "Connection pool utilization: 48%",
+        "relevant": false
+      },
+      {
+        "id": "log-che-125709800-001",
+        "timestamp": "2026-04-12T16:34:06Z",
+        "level": "INFO",
+        "message": "Cache warmer completed, 1799 keys refreshed",
+        "relevant": false
+      },
+      {
+        "id": "log-che-125709800-002",
+        "timestamp": "2026-04-12T17:56:12Z",
+        "level": "WARN",
+        "message": "Deployment v5.7.0 rolled out successfully",
+        "relevant": false
+      },
+      {
+        "id": "log-che-125709800-003",
+        "timestamp": "2026-04-12T19:18:18Z",
+        "level": "WARN",
+        "message": "Cache warmer completed, 1559 keys refreshed",
+        "relevant": false
+      },
+      {
+        "id": "log-che-125709800-004",
+        "timestamp": "2026-04-12T20:40:25Z",
+        "level": "INFO",
+        "message": "Deployment v5.17.1 rolled out successfully",
+        "relevant": false
+      },
+      {
+        "id": "log-che-125709800-005",
+        "timestamp": "2026-04-12T22:02:31Z",
+        "level": "WARN",
+        "message": "Log rotation completed, 5 files archived",
+        "relevant": false
+      },
+      {
+        "id": "log-che-125709800-006",
+        "timestamp": "2026-04-12T23:24:37Z",
+        "level": "DEBUG",
+        "message": "Request processing nominal, latency p99=150ms",
+        "relevant": false
+      },
+      {
+        "id": "log-che-125709800-007",
+        "timestamp": "2026-04-13T00:46:44Z",
+        "level": "INFO",
+        "message": "Health check passed, all endpoints responding",
+        "relevant": false
+      },
+      {
+        "id": "log-che-125709800-008",
+        "timestamp": "2026-04-13T02:08:50Z",
+        "level": "WARN",
+        "message": "Health check passed, all endpoints responding",
+        "relevant": false
+      },
+      {
+        "id": "log-che-125709800-009",
+        "timestamp": "2026-04-13T03:30:56Z",
+        "level": "DEBUG",
+        "message": "Connection pool utilization: 29%",
+        "relevant": false
+      },
+      {
+        "id": "log-che-125709800-010",
+        "timestamp": "2026-04-13T04:53:03Z",
+        "level": "INFO",
+        "message": "Scheduled maintenance task completed",
+        "relevant": false
+      },
+      {
+        "id": "log-che-125709800-011",
+        "timestamp": "2026-04-13T06:15:09Z",
+        "level": "INFO",
+        "message": "Scheduled maintenance task completed",
+        "relevant": false
+      },
+      {
+        "id": "log-che-125709800-012",
+        "timestamp": "2026-04-13T07:37:15Z",
+        "level": "WARN",
+        "message": "Retry budget exhausted for checkout dependency",
+        "relevant": true
+      },
+      {
+        "id": "log-che-125709800-013",
+        "timestamp": "2026-04-13T08:59:22Z",
+        "level": "WARN",
+        "message": "Fallback cache serving stale data",
+        "relevant": false
+      },
+      {
+        "id": "log-che-125709800-014",
+        "timestamp": "2026-04-13T10:21:28Z",
+        "level": "ERROR",
+        "message": "Elevated latency on checkout-dependent routes: 6869ms",
+        "relevant": true
+      },
+      {
+        "id": "log-che-125709800-015",
+        "timestamp": "2026-04-13T11:43:34Z",
+        "level": "INFO",
+        "message": "Elevated latency on checkout-dependent routes: 6821ms",
+        "relevant": false
+      },
+      {
+        "id": "log-che-125709800-016",
+        "timestamp": "2026-04-13T13:05:41Z",
+        "level": "WARN",
+        "message": "Error rate crossed 12% threshold",
+        "relevant": false
+      },
+      {
+        "id": "log-che-125709800-017",
+        "timestamp": "2026-04-13T14:27:47Z",
+        "level": "ERROR",
+        "message": "Error rate crossed 13% threshold",
+        "relevant": false
+      },
+      {
+        "id": "log-che-125709800-018",
+        "timestamp": "2026-04-13T15:49:53Z",
+        "level": "WARN",
+        "message": "Retry budget exhausted for checkout dependency",
+        "relevant": false
+      }
+    ],
+    "notification-worker": [
+      {
+        "id": "log-not-125709800-000",
+        "timestamp": "2026-04-12T15:12:00Z",
+        "level": "DEBUG",
+        "message": "Connection pool utilization: 53%",
+        "relevant": false
+      },
+      {
+        "id": "log-not-125709800-001",
+        "timestamp": "2026-04-12T16:34:06Z",
+        "level": "INFO",
+        "message": "Log rotation completed, 14 files archived",
+        "relevant": false
+      },
+      {
+        "id": "log-not-125709800-002",
+        "timestamp": "2026-04-12T17:56:12Z",
+        "level": "DEBUG",
+        "message": "Cache warmer completed, 4411 keys refreshed",
+        "relevant": false
+      },
+      {
+        "id": "log-not-125709800-003",
+        "timestamp": "2026-04-12T19:18:18Z",
+        "level": "DEBUG",
+        "message": "Scheduled maintenance task completed",
+        "relevant": false
+      },
+      {
+        "id": "log-not-125709800-004",
+        "timestamp": "2026-04-12T20:40:25Z",
+        "level": "DEBUG",
+        "message": "Scheduled maintenance task completed",
+        "relevant": false
+      },
+      {
+        "id": "log-not-125709800-005",
+        "timestamp": "2026-04-12T22:02:31Z",
+        "level": "DEBUG",
+        "message": "Connection pool utilization: 52%",
+        "relevant": false
+      },
+      {
+        "id": "log-not-125709800-006",
+        "timestamp": "2026-04-12T23:24:37Z",
+        "level": "WARN",
+        "message": "Deployment v1.6.2 rolled out successfully",
+        "relevant": false
+      },
+      {
+        "id": "log-not-125709800-007",
+        "timestamp": "2026-04-13T00:46:44Z",
+        "level": "INFO",
+        "message": "Log rotation completed, 20 files archived",
+        "relevant": false
+      },
+      {
+        "id": "log-not-125709800-008",
+        "timestamp": "2026-04-13T02:08:50Z",
+        "level": "INFO",
+        "message": "Connection pool utilization: 39%",
+        "relevant": false
+      },
+      {
+        "id": "log-not-125709800-009",
+        "timestamp": "2026-04-13T03:30:56Z",
+        "level": "INFO",
+        "message": "Log rotation completed, 17 files archived",
+        "relevant": false
+      },
+      {
+        "id": "log-not-125709800-010",
+        "timestamp": "2026-04-13T04:53:03Z",
+        "level": "INFO",
+        "message": "Scheduled maintenance task completed",
+        "relevant": false
+      },
+      {
+        "id": "log-not-125709800-011",
+        "timestamp": "2026-04-13T06:15:09Z",
+        "level": "INFO",
+        "message": "Request processing nominal, latency p99=136ms",
+        "relevant": false
+      },
+      {
+        "id": "log-not-125709800-012",
+        "timestamp": "2026-04-13T07:37:15Z",
+        "level": "ERROR",
+        "message": "Retry budget exhausted for notification-worker dependency",
+        "relevant": true
+      },
+      {
+        "id": "log-not-125709800-013",
+        "timestamp": "2026-04-13T08:59:22Z",
+        "level": "WARN",
+        "message": "Error rate crossed 12% threshold",
+        "relevant": false
+      },
+      {
+        "id": "log-not-125709800-014",
+        "timestamp": "2026-04-13T10:21:28Z",
+        "level": "ERROR",
+        "message": "Elevated latency on notification-worker-dependent routes: 4948ms",
+        "relevant": true
+      },
+      {
+        "id": "log-not-125709800-015",
+        "timestamp": "2026-04-13T11:43:34Z",
+        "level": "ERROR",
+        "message": "Upstream notification-worker returning 503 errors",
+        "relevant": true
+      },
+      {
+        "id": "log-not-125709800-016",
+        "timestamp": "2026-04-13T13:05:41Z",
+        "level": "INFO",
+        "message": "Fallback cache serving stale data",
+        "relevant": false
+      },
+      {
+        "id": "log-not-125709800-017",
+        "timestamp": "2026-04-13T14:27:47Z",
+        "level": "WARN",
+        "message": "Retry budget exhausted for notification-worker dependency",
+        "relevant": false
+      },
+      {
+        "id": "log-not-125709800-018",
+        "timestamp": "2026-04-13T15:49:53Z",
+        "level": "WARN",
+        "message": "Upstream notification-worker returning 504 errors",
+        "relevant": false
+      }
+    ],
+    "api-gateway": [
+      {
+        "id": "log-api-125709800-000",
+        "timestamp": "2026-04-12T15:12:00Z",
+        "level": "WARN",
+        "message": "Log rotation completed, 19 files archived",
+        "relevant": false
+      },
+      {
+        "id": "log-api-125709800-001",
+        "timestamp": "2026-04-12T16:34:06Z",
+        "level": "DEBUG",
+        "message": "Health check passed, all endpoints responding",
+        "relevant": false
+      },
+      {
+        "id": "log-api-125709800-002",
+        "timestamp": "2026-04-12T17:56:12Z",
+        "level": "INFO",
+        "message": "Health check passed, all endpoints responding",
+        "relevant": false
+      },
+      {
+        "id": "log-api-125709800-003",
+        "timestamp": "2026-04-12T19:18:18Z",
+        "level": "INFO",
+        "message": "Deployment v1.13.0 rolled out successfully",
+        "relevant": false
+      },
+      {
+        "id": "log-api-125709800-004",
+        "timestamp": "2026-04-12T20:40:25Z",
+        "level": "WARN",
+        "message": "Log rotation completed, 15 files archived",
+        "relevant": false
+      },
+      {
+        "id": "log-api-125709800-005",
+        "timestamp": "2026-04-12T22:02:31Z",
+        "level": "INFO",
+        "message": "Scheduled maintenance task completed",
+        "relevant": false
+      },
+      {
+        "id": "log-api-125709800-006",
+        "timestamp": "2026-04-12T23:24:37Z",
+        "level": "WARN",
+        "message": "Request processing nominal, latency p99=146ms",
+        "relevant": false
+      },
+      {
+        "id": "log-api-125709800-007",
+        "timestamp": "2026-04-13T00:46:44Z",
+        "level": "INFO",
+        "message": "Deployment v1.5.9 rolled out successfully",
+        "relevant": false
+      },
+      {
+        "id": "log-api-125709800-008",
+        "timestamp": "2026-04-13T02:08:50Z",
+        "level": "INFO",
+        "message": "Scheduled maintenance task completed",
+        "relevant": false
+      },
+      {
+        "id": "log-api-125709800-009",
+        "timestamp": "2026-04-13T03:30:56Z",
+        "level": "DEBUG",
+        "message": "Health check passed, all endpoints responding",
+        "relevant": false
+      },
+      {
+        "id": "log-api-125709800-010",
+        "timestamp": "2026-04-13T04:53:03Z",
+        "level": "INFO",
+        "message": "Deployment v2.13.7 rolled out successfully",
+        "relevant": false
+      },
+      {
+        "id": "log-api-125709800-011",
+        "timestamp": "2026-04-13T06:15:09Z",
+        "level": "INFO",
+        "message": "Log rotation completed, 12 files archived",
+        "relevant": false
+      },
+      {
+        "id": "log-api-125709800-012",
+        "timestamp": "2026-04-13T07:37:15Z",
+        "level": "INFO",
+        "message": "Fallback cache serving stale data",
+        "relevant": false
+      },
+      {
+        "id": "log-api-125709800-013",
+        "timestamp": "2026-04-13T08:59:22Z",
+        "level": "ERROR",
+        "message": "Error rate crossed 17% threshold",
+        "relevant": false
+      },
+      {
+        "id": "log-api-125709800-014",
+        "timestamp": "2026-04-13T10:21:28Z",
+        "level": "INFO",
+        "message": "Error rate crossed 8% threshold",
+        "relevant": false
+      },
+      {
+        "id": "log-api-125709800-015",
+        "timestamp": "2026-04-13T11:43:34Z",
+        "level": "ERROR",
+        "message": "Fallback cache serving stale data",
+        "relevant": false
+      },
+      {
+        "id": "log-api-125709800-016",
+        "timestamp": "2026-04-13T13:05:41Z",
+        "level": "WARN",
+        "message": "Fallback cache serving stale data",
+        "relevant": true
+      },
+      {
+        "id": "log-api-125709800-017",
+        "timestamp": "2026-04-13T14:27:47Z",
+        "level": "INFO",
+        "message": "Elevated latency on api-gateway-dependent routes: 6779ms",
+        "relevant": false
+      },
+      {
+        "id": "log-api-125709800-018",
+        "timestamp": "2026-04-13T15:49:53Z",
+        "level": "INFO",
+        "message": "Elevated latency on api-gateway-dependent routes: 3296ms",
+        "relevant": true
+      }
+    ],
+    "metrics-collector": [
+      {
+        "id": "log-met-125709800-000",
+        "timestamp": "2026-04-12T15:12:00Z",
+        "level": "DEBUG",
+        "message": "Health check passed, all endpoints responding",
+        "relevant": false
+      },
+      {
+        "id": "log-met-125709800-001",
+        "timestamp": "2026-04-12T16:34:06Z",
+        "level": "INFO",
+        "message": "Connection pool utilization: 39%",
+        "relevant": false
+      },
+      {
+        "id": "log-met-125709800-002",
+        "timestamp": "2026-04-12T17:56:12Z",
+        "level": "INFO",
+        "message": "Cache warmer completed, 1165 keys refreshed",
+        "relevant": false
+      },
+      {
+        "id": "log-met-125709800-003",
+        "timestamp": "2026-04-12T19:18:18Z",
+        "level": "DEBUG",
+        "message": "Cache warmer completed, 1187 keys refreshed",
+        "relevant": false
+      },
+      {
+        "id": "log-met-125709800-004",
+        "timestamp": "2026-04-12T20:40:25Z",
+        "level": "WARN",
+        "message": "Request processing nominal, latency p99=151ms",
+        "relevant": false
+      },
+      {
+        "id": "log-met-125709800-005",
+        "timestamp": "2026-04-12T22:02:31Z",
+        "level": "INFO",
+        "message": "Health check passed, all endpoints responding",
+        "relevant": false
+      },
+      {
+        "id": "log-met-125709800-006",
+        "timestamp": "2026-04-12T23:24:37Z",
+        "level": "WARN",
+        "message": "Scheduled maintenance task completed",
+        "relevant": false
+      },
+      {
+        "id": "log-met-125709800-007",
+        "timestamp": "2026-04-13T00:46:44Z",
+        "level": "WARN",
+        "message": "Scheduled maintenance task completed",
+        "relevant": false
+      },
+      {
+        "id": "log-met-125709800-008",
+        "timestamp": "2026-04-13T02:08:50Z",
+        "level": "INFO",
+        "message": "Connection pool utilization: 46%",
+        "relevant": false
+      },
+      {
+        "id": "log-met-125709800-009",
+        "timestamp": "2026-04-13T03:30:56Z",
+        "level": "WARN",
+        "message": "Log rotation completed, 10 files archived",
+        "relevant": false
+      },
+      {
+        "id": "log-met-125709800-010",
+        "timestamp": "2026-04-13T04:53:03Z",
+        "level": "INFO",
+        "message": "Log rotation completed, 13 files archived",
+        "relevant": false
+      },
+      {
+        "id": "log-met-125709800-011",
+        "timestamp": "2026-04-13T06:15:09Z",
+        "level": "WARN",
+        "message": "Cache warmer completed, 3873 keys refreshed",
+        "relevant": false
+      },
+      {
+        "id": "log-met-125709800-012",
+        "timestamp": "2026-04-13T07:37:15Z",
+        "level": "WARN",
+        "message": "Retry budget exhausted for metrics-collector dependency",
+        "relevant": false
+      },
+      {
+        "id": "log-met-125709800-013",
+        "timestamp": "2026-04-13T08:59:22Z",
+        "level": "WARN",
+        "message": "Upstream metrics-collector returning 504 errors",
+        "relevant": false
+      },
+      {
+        "id": "log-met-125709800-014",
+        "timestamp": "2026-04-13T10:21:28Z",
+        "level": "ERROR",
+        "message": "Retry budget exhausted for metrics-collector dependency",
+        "relevant": false
+      },
+      {
+        "id": "log-met-125709800-015",
+        "timestamp": "2026-04-13T11:43:34Z",
+        "level": "ERROR",
+        "message": "Retry budget exhausted for metrics-collector dependency",
+        "relevant": false
+      },
+      {
+        "id": "log-met-125709800-016",
+        "timestamp": "2026-04-13T13:05:41Z",
+        "level": "INFO",
+        "message": "Error rate crossed 8% threshold",
+        "relevant": true
+      },
+      {
+        "id": "log-met-125709800-017",
+        "timestamp": "2026-04-13T14:27:47Z",
+        "level": "ERROR",
+        "message": "Retry budget exhausted for metrics-collector dependency",
+        "relevant": false
+      },
+      {
+        "id": "log-met-125709800-018",
+        "timestamp": "2026-04-13T15:49:53Z",
+        "level": "INFO",
+        "message": "Upstream metrics-collector returning 504 errors",
+        "relevant": false
+      }
+    ],
+    "order-manager": [
+      {
+        "id": "log-ord-125709800-000",
+        "timestamp": "2026-04-12T15:12:00Z",
+        "level": "WARN",
+        "message": "Connection pool utilization: 27%",
+        "relevant": false
+      },
+      {
+        "id": "log-ord-125709800-001",
+        "timestamp": "2026-04-12T16:34:06Z",
+        "level": "WARN",
+        "message": "Health check passed, all endpoints responding",
+        "relevant": false
+      },
+      {
+        "id": "log-ord-125709800-002",
+        "timestamp": "2026-04-12T17:56:12Z",
+        "level": "DEBUG",
+        "message": "Health check passed, all endpoints responding",
+        "relevant": false
+      },
+      {
+        "id": "log-ord-125709800-003",
+        "timestamp": "2026-04-12T19:18:18Z",
+        "level": "WARN",
+        "message": "Scheduled maintenance task completed",
+        "relevant": false
+      },
+      {
+        "id": "log-ord-125709800-004",
+        "timestamp": "2026-04-12T20:40:25Z",
+        "level": "DEBUG",
+        "message": "Connection pool utilization: 31%",
+        "relevant": false
+      },
+      {
+        "id": "log-ord-125709800-005",
+        "timestamp": "2026-04-12T22:02:31Z",
+        "level": "DEBUG",
+        "message": "Health check passed, all endpoints responding",
+        "relevant": false
+      },
+      {
+        "id": "log-ord-125709800-006",
+        "timestamp": "2026-04-12T23:24:37Z",
+        "level": "INFO",
+        "message": "Scheduled maintenance task completed",
+        "relevant": false
+      },
+      {
+        "id": "log-ord-125709800-007",
+        "timestamp": "2026-04-13T00:46:44Z",
+        "level": "DEBUG",
+        "message": "Scheduled maintenance task completed",
+        "relevant": false
+      },
+      {
+        "id": "log-ord-125709800-008",
+        "timestamp": "2026-04-13T02:08:50Z",
+        "level": "DEBUG",
+        "message": "Scheduled maintenance task completed",
+        "relevant": false
+      },
+      {
+        "id": "log-ord-125709800-009",
+        "timestamp": "2026-04-13T03:30:56Z",
+        "level": "INFO",
+        "message": "Connection pool utilization: 39%",
+        "relevant": false
+      },
+      {
+        "id": "log-ord-125709800-010",
+        "timestamp": "2026-04-13T04:53:03Z",
+        "level": "INFO",
+        "message": "Cache warmer completed, 3915 keys refreshed",
+        "relevant": false
+      },
+      {
+        "id": "log-ord-125709800-011",
+        "timestamp": "2026-04-13T06:15:09Z",
+        "level": "INFO",
+        "message": "Health check passed, all endpoints responding",
+        "relevant": false
+      },
+      {
+        "id": "log-ord-125709800-012",
+        "timestamp": "2026-04-13T07:37:15Z",
+        "level": "INFO",
+        "message": "Elevated latency on order-manager-dependent routes: 4616ms",
+        "relevant": true
+      },
+      {
+        "id": "log-ord-125709800-013",
+        "timestamp": "2026-04-13T08:59:22Z",
+        "level": "WARN",
+        "message": "Elevated latency on order-manager-dependent routes: 2139ms",
+        "relevant": false
+      },
+      {
+        "id": "log-ord-125709800-014",
+        "timestamp": "2026-04-13T10:21:28Z",
+        "level": "ERROR",
+        "message": "Error rate crossed 17% threshold",
+        "relevant": true
+      },
+      {
+        "id": "log-ord-125709800-015",
+        "timestamp": "2026-04-13T11:43:34Z",
+        "level": "ERROR",
+        "message": "Fallback cache serving stale data",
+        "relevant": false
+      },
+      {
+        "id": "log-ord-125709800-016",
+        "timestamp": "2026-04-13T13:05:41Z",
+        "level": "INFO",
+        "message": "Retry budget exhausted for order-manager dependency",
+        "relevant": false
+      },
+      {
+        "id": "log-ord-125709800-017",
+        "timestamp": "2026-04-13T14:27:47Z",
+        "level": "ERROR",
+        "message": "Upstream order-manager returning 504 errors",
+        "relevant": false
+      },
+      {
+        "id": "log-ord-125709800-018",
+        "timestamp": "2026-04-13T15:49:53Z",
+        "level": "WARN",
+        "message": "Elevated latency on order-manager-dependent routes: 5609ms",
+        "relevant": false
+      }
+    ],
+    "email-sender": [
+      {
+        "id": "log-ema-125709800-000",
+        "timestamp": "2026-04-12T15:12:00Z",
+        "level": "WARN",
+        "message": "Cache warmer completed, 3991 keys refreshed",
+        "relevant": false
+      },
+      {
+        "id": "log-ema-125709800-001",
+        "timestamp": "2026-04-12T16:34:06Z",
+        "level": "DEBUG",
+        "message": "Deployment v1.8.0 rolled out successfully",
+        "relevant": false
+      },
+      {
+        "id": "log-ema-125709800-002",
+        "timestamp": "2026-04-12T17:56:12Z",
+        "level": "DEBUG",
+        "message": "Connection pool utilization: 46%",
+        "relevant": false
+      },
+      {
+        "id": "log-ema-125709800-003",
+        "timestamp": "2026-04-12T19:18:18Z",
+        "level": "INFO",
+        "message": "Deployment v2.15.8 rolled out successfully",
+        "relevant": false
+      },
+      {
+        "id": "log-ema-125709800-004",
+        "timestamp": "2026-04-12T20:40:25Z",
+        "level": "DEBUG",
+        "message": "Deployment v2.10.1 rolled out successfully",
+        "relevant": false
+      },
+      {
+        "id": "log-ema-125709800-005",
+        "timestamp": "2026-04-12T22:02:31Z",
+        "level": "DEBUG",
+        "message": "Connection pool utilization: 14%",
+        "relevant": false
+      },
+      {
+        "id": "log-ema-125709800-006",
+        "timestamp": "2026-04-12T23:24:37Z",
+        "level": "INFO",
+        "message": "Cache warmer completed, 3672 keys refreshed",
+        "relevant": false
+      },
+      {
+        "id": "log-ema-125709800-007",
+        "timestamp": "2026-04-13T00:46:44Z",
+        "level": "INFO",
+        "message": "Cache warmer completed, 2317 keys refreshed",
+        "relevant": false
+      },
+      {
+        "id": "log-ema-125709800-008",
+        "timestamp": "2026-04-13T02:08:50Z",
+        "level": "DEBUG",
+        "message": "Log rotation completed, 6 files archived",
+        "relevant": false
+      },
+      {
+        "id": "log-ema-125709800-009",
+        "timestamp": "2026-04-13T03:30:56Z",
+        "level": "INFO",
+        "message": "Connection pool utilization: 33%",
+        "relevant": false
+      },
+      {
+        "id": "log-ema-125709800-010",
+        "timestamp": "2026-04-13T04:53:03Z",
+        "level": "INFO",
+        "message": "Request processing nominal, latency p99=136ms",
+        "relevant": false
+      },
+      {
+        "id": "log-ema-125709800-011",
+        "timestamp": "2026-04-13T06:15:09Z",
+        "level": "INFO",
+        "message": "Connection pool utilization: 32%",
+        "relevant": false
+      },
+      {
+        "id": "log-ema-125709800-012",
+        "timestamp": "2026-04-13T07:37:15Z",
+        "level": "WARN",
+        "message": "Cascading failure detected from downstream dependency",
+        "relevant": false
+      },
+      {
+        "id": "log-ema-125709800-013",
+        "timestamp": "2026-04-13T08:59:22Z",
+        "level": "ERROR",
+        "message": "OutOfMemoryError: Cannot acquire resource \u2014 pool exhausted (1/16 active)",
+        "relevant": true
+      },
+      {
+        "id": "log-ema-125709800-014",
+        "timestamp": "2026-04-13T10:21:28Z",
+        "level": "ERROR",
+        "message": "Memory usage at 90% \u2014 GC pressure critical",
+        "relevant": true
+      },
+      {
+        "id": "log-ema-125709800-015",
+        "timestamp": "2026-04-13T11:43:34Z",
+        "level": "ERROR",
+        "message": "Circuit breaker OPEN after 6 consecutive failures",
+        "relevant": true
+      },
+      {
+        "id": "log-ema-125709800-016",
+        "timestamp": "2026-04-13T13:05:41Z",
+        "level": "CRITICAL",
+        "message": "Circuit breaker OPEN after 14 consecutive failures",
+        "relevant": true
+      },
+      {
+        "id": "log-ema-125709800-017",
+        "timestamp": "2026-04-13T14:27:47Z",
+        "level": "ERROR",
+        "message": "Response latency p99 = 14543ms (threshold: 2000ms)",
+        "relevant": true
+      },
+      {
+        "id": "log-ema-125709800-018",
+        "timestamp": "2026-04-13T15:49:53Z",
+        "level": "WARN",
+        "message": "Cascading failure detected from downstream dependency",
+        "relevant": true
+      }
+    ],
+    "user-profile": [
+      {
+        "id": "log-use-125709800-000",
+        "timestamp": "2026-04-12T15:12:00Z",
+        "level": "WARN",
+        "message": "Deployment v3.16.5 rolled out successfully",
+        "relevant": false
+      },
+      {
+        "id": "log-use-125709800-001",
+        "timestamp": "2026-04-12T16:34:06Z",
+        "level": "INFO",
+        "message": "Health check passed, all endpoints responding",
+        "relevant": false
+      },
+      {
+        "id": "log-use-125709800-002",
+        "timestamp": "2026-04-12T17:56:12Z",
+        "level": "DEBUG",
+        "message": "Scheduled maintenance task completed",
+        "relevant": false
+      },
+      {
+        "id": "log-use-125709800-003",
+        "timestamp": "2026-04-12T19:18:18Z",
+        "level": "WARN",
+        "message": "Log rotation completed, 7 files archived",
+        "relevant": false
+      },
+      {
+        "id": "log-use-125709800-004",
+        "timestamp": "2026-04-12T20:40:25Z",
+        "level": "DEBUG",
+        "message": "Deployment v5.10.8 rolled out successfully",
+        "relevant": false
+      },
+      {
+        "id": "log-use-125709800-005",
+        "timestamp": "2026-04-12T22:02:31Z",
+        "level": "INFO",
+        "message": "Request processing nominal, latency p99=188ms",
+        "relevant": false
+      },
+      {
+        "id": "log-use-125709800-006",
+        "timestamp": "2026-04-12T23:24:37Z",
+        "level": "WARN",
+        "message": "Request processing nominal, latency p99=131ms",
+        "relevant": false
+      },
+      {
+        "id": "log-use-125709800-007",
+        "timestamp": "2026-04-13T00:46:44Z",
+        "level": "INFO",
+        "message": "Cache warmer completed, 2456 keys refreshed",
+        "relevant": false
+      },
+      {
+        "id": "log-use-125709800-008",
+        "timestamp": "2026-04-13T02:08:50Z",
+        "level": "DEBUG",
+        "message": "Request processing nominal, latency p99=97ms",
+        "relevant": false
+      },
+      {
+        "id": "log-use-125709800-009",
+        "timestamp": "2026-04-13T03:30:56Z",
+        "level": "WARN",
+        "message": "Cache warmer completed, 3713 keys refreshed",
+        "relevant": false
+      },
+      {
+        "id": "log-use-125709800-010",
+        "timestamp": "2026-04-13T04:53:03Z",
+        "level": "WARN",
+        "message": "Cache warmer completed, 977 keys refreshed",
+        "relevant": false
+      },
+      {
+        "id": "log-use-125709800-011",
+        "timestamp": "2026-04-13T06:15:09Z",
+        "level": "INFO",
+        "message": "Cache warmer completed, 3617 keys refreshed",
+        "relevant": false
+      },
+      {
+        "id": "log-use-125709800-012",
+        "timestamp": "2026-04-13T07:37:15Z",
+        "level": "INFO",
+        "message": "Retry budget exhausted for user-profile dependency",
+        "relevant": false
+      },
+      {
+        "id": "log-use-125709800-013",
+        "timestamp": "2026-04-13T08:59:22Z",
+        "level": "INFO",
+        "message": "Retry budget exhausted for user-profile dependency",
+        "relevant": false
+      },
+      {
+        "id": "log-use-125709800-014",
+        "timestamp": "2026-04-13T10:21:28Z",
+        "level": "ERROR",
+        "message": "Error rate crossed 16% threshold",
+        "relevant": false
+      },
+      {
+        "id": "log-use-125709800-015",
+        "timestamp": "2026-04-13T11:43:34Z",
+        "level": "INFO",
+        "message": "Elevated latency on user-profile-dependent routes: 4651ms",
+        "relevant": false
+      },
+      {
+        "id": "log-use-125709800-016",
+        "timestamp": "2026-04-13T13:05:41Z",
+        "level": "INFO",
+        "message": "Retry budget exhausted for user-profile dependency",
+        "relevant": true
+      },
+      {
+        "id": "log-use-125709800-017",
+        "timestamp": "2026-04-13T14:27:47Z",
+        "level": "INFO",
+        "message": "Retry budget exhausted for user-profile dependency",
+        "relevant": false
+      },
+      {
+        "id": "log-use-125709800-018",
+        "timestamp": "2026-04-13T15:49:53Z",
+        "level": "ERROR",
+        "message": "Retry budget exhausted for user-profile dependency",
+        "relevant": true
+      }
+    ]
+  },
+  "traces": [
+    {
+      "trace_id": "trace-125709800-000",
+      "timestamp": "2026-04-13T13:12:00Z",
+      "spans": [
+        {
+          "service": "user-profile",
+          "operation": "/internal/health",
+          "duration_ms": 32,
+          "status": "OK"
+        },
+        {
+          "service": "recommendation",
+          "operation": "/internal/data/query",
+          "duration_ms": 40,
+          "status": "OK"
+        },
+        {
+          "service": "email-sender",
+          "operation": "/internal/data/query",
+          "duration_ms": 175,
+          "status": "OK"
+        },
+        {
+          "service": "notification-worker",
+          "operation": "/api/v1/auth/validate",
+          "duration_ms": 43,
+          "status": "OK"
+        }
+      ],
+      "relevant": false
+    },
+    {
+      "trace_id": "trace-125709800-001",
+      "timestamp": "2026-04-13T13:18:51Z",
+      "spans": [
+        {
+          "service": "user-profile",
+          "operation": "/api/v1/auth/validate",
+          "duration_ms": 77,
+          "status": "OK"
+        },
+        {
+          "service": "redis-cache",
+          "operation": "/api/v1/dashboard",
+          "duration_ms": 85,
+          "status": "OK"
+        }
+      ],
+      "relevant": false
+    },
+    {
+      "trace_id": "trace-125709800-002",
+      "timestamp": "2026-04-13T13:25:42Z",
+      "spans": [
+        {
+          "service": "checkout",
+          "operation": "/internal/health",
+          "duration_ms": 113,
+          "status": "OK"
+        },
+        {
+          "service": "api-gateway",
+          "operation": "/internal/data/query",
+          "duration_ms": 86,
+          "status": "OK"
+        }
+      ],
+      "relevant": false
+    },
+    {
+      "trace_id": "trace-125709800-003",
+      "timestamp": "2026-04-13T13:32:34Z",
+      "spans": [
+        {
+          "service": "api-gateway",
+          "operation": "/api/v1/dashboard",
+          "duration_ms": 190,
+          "status": "OK"
+        }
+      ],
+      "relevant": false
+    },
+    {
+      "trace_id": "trace-125709800-004",
+      "timestamp": "2026-04-13T13:39:25Z",
+      "spans": [
+        {
+          "service": "user-profile",
+          "operation": "/api/v1/search",
+          "duration_ms": 195,
+          "status": "OK"
+        },
+        {
+          "service": "fraud-detector",
+          "operation": "/internal/data/query",
+          "duration_ms": 108,
+          "status": "OK"
+        }
+      ],
+      "relevant": false
+    },
+    {
+      "trace_id": "trace-125709800-005",
+      "timestamp": "2026-04-13T13:46:17Z",
+      "spans": [
+        {
+          "service": "payment-gateway",
+          "operation": "/api/v1/dashboard",
+          "duration_ms": 15,
+          "status": "OK"
+        },
+        {
+          "service": "order-manager",
+          "operation": "/internal/health",
+          "duration_ms": 95,
+          "status": "OK"
+        },
+        {
+          "service": "checkout",
+          "operation": "/internal/batch/process",
+          "duration_ms": 99,
+          "status": "OK"
+        }
+      ],
+      "relevant": false
+    },
+    {
+      "trace_id": "trace-125709800-006",
+      "timestamp": "2026-04-13T13:53:08Z",
+      "spans": [
+        {
+          "service": "email-sender",
+          "operation": "/api/v1/settings",
+          "duration_ms": 135,
+          "status": "OK"
+        },
+        {
+          "service": "payment-gateway",
+          "operation": "/api/v1/dashboard",
+          "duration_ms": 127,
+          "status": "OK"
+        },
+        {
+          "service": "user-profile",
+          "operation": "/internal/data/query",
+          "duration_ms": 30,
+          "status": "OK"
+        }
+      ],
+      "relevant": false
+    },
+    {
+      "trace_id": "trace-125709800-007",
+      "timestamp": "2026-04-13T14:00:00Z",
+      "spans": [
+        {
+          "service": "fraud-detector",
+          "operation": "/api/v1/users",
+          "duration_ms": 66,
+          "status": "OK"
+        },
+        {
+          "service": "api-gateway",
+          "operation": "/internal/data/query",
+          "duration_ms": 40,
+          "status": "OK"
+        }
+      ],
+      "relevant": false
+    },
+    {
+      "trace_id": "trace-125709800-008",
+      "timestamp": "2026-04-13T14:06:51Z",
+      "spans": [
+        {
+          "service": "payment-gateway",
+          "operation": "/internal/metrics",
+          "duration_ms": 58,
+          "status": "OK"
+        },
+        {
+          "service": "redis-cache",
+          "operation": "/internal/batch/process",
+          "duration_ms": 102,
+          "status": "OK"
+        },
+        {
+          "service": "email-sender",
+          "operation": "/api/v1/dashboard",
+          "duration_ms": 31,
+          "status": "OK"
+        }
+      ],
+      "relevant": false
+    },
+    {
+      "trace_id": "trace-125709800-009",
+      "timestamp": "2026-04-13T14:13:42Z",
+      "spans": [
+        {
+          "service": "payment-gateway",
+          "operation": "/api/v1/search",
+          "duration_ms": 77,
+          "status": "OK"
+        },
+        {
+          "service": "user-profile",
+          "operation": "/internal/data/query",
+          "duration_ms": 107,
+          "status": "OK"
+        },
+        {
+          "service": "api-gateway",
+          "operation": "/internal/data/query",
+          "duration_ms": 141,
+          "status": "OK"
+        }
+      ],
+      "relevant": false
+    },
+    {
+      "trace_id": "trace-125709800-010",
+      "timestamp": "2026-04-13T14:20:34Z",
+      "spans": [
+        {
+          "service": "recommendation",
+          "operation": "/internal/metrics",
+          "duration_ms": 198,
+          "status": "OK"
+        }
+      ],
+      "relevant": false
+    },
+    {
+      "trace_id": "trace-125709800-011",
+      "timestamp": "2026-04-13T14:27:25Z",
+      "spans": [
+        {
+          "service": "order-manager",
+          "operation": "/internal/health",
+          "duration_ms": 193,
+          "status": "OK"
+        },
+        {
+          "service": "user-profile",
+          "operation": "/internal/data/query",
+          "duration_ms": 118,
+          "status": "OK"
+        },
+        {
+          "service": "recommendation",
+          "operation": "/api/v1/auth/validate",
+          "duration_ms": 200,
+          "status": "OK"
+        }
+      ],
+      "relevant": false
+    },
+    {
+      "trace_id": "trace-125709800-012",
+      "timestamp": "2026-04-13T14:34:17Z",
+      "spans": [
+        {
+          "service": "payment-gateway",
+          "operation": "/api/v1/dashboard",
+          "duration_ms": 40,
+          "status": "OK"
+        }
+      ],
+      "relevant": false
+    },
+    {
+      "trace_id": "trace-125709800-013",
+      "timestamp": "2026-04-13T14:41:08Z",
+      "spans": [
+        {
+          "service": "notification-worker",
+          "operation": "/internal/health",
+          "duration_ms": 11,
+          "status": "OK"
+        },
+        {
+          "service": "redis-cache",
+          "operation": "/api/v1/dashboard",
+          "duration_ms": 95,
+          "status": "OK"
+        },
+        {
+          "service": "api-gateway",
+          "operation": "/internal/data/query",
+          "duration_ms": 17,
+          "status": "OK"
+        },
+        {
+          "service": "recommendation",
+          "operation": "/api/v1/settings",
+          "duration_ms": 195,
+          "status": "OK"
+        }
+      ],
+      "relevant": false
+    },
+    {
+      "trace_id": "trace-125709800-014",
+      "timestamp": "2026-04-13T14:48:00Z",
+      "spans": [
+        {
+          "service": "redis-cache",
+          "operation": "/internal/batch/process",
+          "duration_ms": 42,
+          "status": "OK"
+        }
+      ],
+      "relevant": false
+    },
+    {
+      "trace_id": "trace-125709800-015",
+      "timestamp": "2026-04-13T14:54:51Z",
+      "spans": [
+        {
+          "service": "email-sender",
+          "operation": "/internal/health",
+          "duration_ms": 168,
+          "status": "OK"
+        },
+        {
+          "service": "notification-worker",
+          "operation": "/api/v1/users",
+          "duration_ms": 54,
+          "status": "OK"
+        },
+        {
+          "service": "order-manager",
+          "operation": "/internal/metrics",
+          "duration_ms": 36,
+          "status": "OK"
+        }
+      ],
+      "relevant": false
+    },
+    {
+      "trace_id": "trace-125709800-016",
+      "timestamp": "2026-04-13T15:01:42Z",
+      "spans": [
+        {
+          "service": "redis-cache",
+          "operation": "/internal/metrics",
+          "duration_ms": 184,
+          "status": "OK"
+        },
+        {
+          "service": "api-gateway",
+          "operation": "/api/v1/users",
+          "duration_ms": 17,
+          "status": "OK"
+        }
+      ],
+      "relevant": false
+    },
+    {
+      "trace_id": "trace-125709800-017",
+      "timestamp": "2026-04-13T15:08:34Z",
+      "spans": [
+        {
+          "service": "user-profile",
+          "operation": "/api/v1/dashboard",
+          "duration_ms": 56,
+          "status": "OK"
+        },
+        {
+          "service": "email-sender",
+          "operation": "/api/v1/users",
+          "duration_ms": 148,
+          "status": "OK"
+        },
+        {
+          "service": "redis-cache",
+          "operation": "/internal/health",
+          "duration_ms": 126,
+          "status": "OK"
+        },
+        {
+          "service": "api-gateway",
+          "operation": "/internal/batch/process",
+          "duration_ms": 83,
+          "status": "OK"
+        }
+      ],
+      "relevant": false
+    },
+    {
+      "trace_id": "trace-125709800-018",
+      "timestamp": "2026-04-13T15:15:25Z",
+      "spans": [
+        {
+          "service": "redis-cache",
+          "operation": "/api/v1/search",
+          "duration_ms": 6576,
+          "status": "ERROR",
+          "error": "upstream email-sender timeout"
+        },
+        {
+          "service": "user-profile",
+          "operation": "/api/v1/dashboard",
+          "duration_ms": 5305,
+          "status": "ERROR",
+          "error": "upstream email-sender timeout"
+        },
+        {
+          "service": "metrics-collector",
+          "operation": "/internal/batch/process",
+          "duration_ms": 4545,
+          "status": "ERROR",
+          "error": "upstream email-sender timeout"
+        },
+        {
+          "service": "checkout",
+          "operation": "/api/v1/auth/validate",
+          "duration_ms": 4683,
+          "status": "SLOW",
+          "error": "upstream email-sender timeout"
+        }
+      ],
+      "relevant": false
+    },
+    {
+      "trace_id": "trace-125709800-019",
+      "timestamp": "2026-04-13T15:22:17Z",
+      "spans": [
+        {
+          "service": "payment-gateway",
+          "operation": "/api/v1/auth/validate",
+          "duration_ms": 6415,
+          "status": "ERROR",
+          "error": "upstream email-sender timeout"
+        },
+        {
+          "service": "redis-cache",
+          "operation": "/internal/health",
+          "duration_ms": 4339,
+          "status": "ERROR",
+          "error": "upstream email-sender timeout"
+        },
+        {
+          "service": "api-gateway",
+          "operation": "/api/v1/dashboard",
+          "duration_ms": 7343,
+          "status": "ERROR",
+          "error": "upstream email-sender timeout"
+        }
+      ],
+      "relevant": false
+    },
+    {
+      "trace_id": "trace-125709800-020",
+      "timestamp": "2026-04-13T15:29:08Z",
+      "spans": [
+        {
+          "service": "notification-worker",
+          "operation": "/api/v1/search",
+          "duration_ms": 7616,
+          "status": "SLOW",
+          "error": "upstream email-sender timeout"
+        },
+        {
+          "service": "api-gateway",
+          "operation": "/api/v1/search",
+          "duration_ms": 7523,
+          "status": "SLOW",
+          "error": "upstream email-sender timeout"
+        },
+        {
+          "service": "email-sender",
+          "operation": "/api/v1/users",
+          "duration_ms": 5644,
+          "status": "ERROR",
+          "error": "OutOfMemoryError: resource unavailable"
+        },
+        {
+          "service": "fraud-detector",
+          "operation": "/api/v1/search",
+          "duration_ms": 4071,
+          "status": "ERROR",
+          "error": "upstream email-sender timeout"
+        }
+      ],
+      "relevant": true
+    },
+    {
+      "trace_id": "trace-125709800-021",
+      "timestamp": "2026-04-13T15:36:00Z",
+      "spans": [
+        {
+          "service": "fraud-detector",
+          "operation": "/api/v1/settings",
+          "duration_ms": 6154,
+          "status": "SLOW",
+          "error": "upstream email-sender timeout"
+        },
+        {
+          "service": "order-manager",
+          "operation": "/internal/data/query",
+          "duration_ms": 4484,
+          "status": "ERROR",
+          "error": "upstream email-sender timeout"
+        }
+      ],
+      "relevant": false
+    },
+    {
+      "trace_id": "trace-125709800-022",
+      "timestamp": "2026-04-13T15:42:51Z",
+      "spans": [
+        {
+          "service": "api-gateway",
+          "operation": "/api/v1/settings",
+          "duration_ms": 6431,
+          "status": "SLOW",
+          "error": "upstream email-sender timeout"
+        },
+        {
+          "service": "email-sender",
+          "operation": "/api/v1/auth/validate",
+          "duration_ms": 6554,
+          "status": "ERROR",
+          "error": "OutOfMemoryError: resource unavailable"
+        }
+      ],
+      "relevant": true
+    },
+    {
+      "trace_id": "trace-125709800-023",
+      "timestamp": "2026-04-13T15:49:42Z",
+      "spans": [
+        {
+          "service": "user-profile",
+          "operation": "/api/v1/users",
+          "duration_ms": 3982,
+          "status": "SLOW",
+          "error": "upstream email-sender timeout"
+        },
+        {
+          "service": "checkout",
+          "operation": "/api/v1/dashboard",
+          "duration_ms": 4137,
+          "status": "SLOW",
+          "error": "upstream email-sender timeout"
+        },
+        {
+          "service": "fraud-detector",
+          "operation": "/internal/batch/process",
+          "duration_ms": 5909,
+          "status": "SLOW",
+          "error": "upstream email-sender timeout"
+        },
+        {
+          "service": "api-gateway",
+          "operation": "/api/v1/auth/validate",
+          "duration_ms": 5264,
+          "status": "SLOW",
+          "error": "upstream email-sender timeout"
+        }
+      ],
+      "relevant": false
+    },
+    {
+      "trace_id": "trace-125709800-024",
+      "timestamp": "2026-04-13T15:56:34Z",
+      "spans": [
+        {
+          "service": "notification-worker",
+          "operation": "/api/v1/settings",
+          "duration_ms": 4598,
+          "status": "ERROR",
+          "error": "upstream email-sender timeout"
+        },
+        {
+          "service": "api-gateway",
+          "operation": "/api/v1/settings",
+          "duration_ms": 3074,
+          "status": "SLOW",
+          "error": "upstream email-sender timeout"
+        },
+        {
+          "service": "order-manager",
+          "operation": "/api/v1/users",
+          "duration_ms": 3558,
+          "status": "SLOW",
+          "error": "upstream email-sender timeout"
+        },
+        {
+          "service": "fraud-detector",
+          "operation": "/internal/data/query",
+          "duration_ms": 3614,
+          "status": "ERROR",
+          "error": "upstream email-sender timeout"
+        }
+      ],
+      "relevant": false
+    },
+    {
+      "trace_id": "trace-125709800-025",
+      "timestamp": "2026-04-13T16:03:25Z",
+      "spans": [
+        {
+          "service": "user-profile",
+          "operation": "/api/v1/settings",
+          "duration_ms": 3811,
+          "status": "ERROR",
+          "error": "upstream email-sender timeout"
+        },
+        {
+          "service": "payment-gateway",
+          "operation": "/internal/metrics",
+          "duration_ms": 7986,
+          "status": "ERROR",
+          "error": "upstream email-sender timeout"
+        }
+      ],
+      "relevant": false
+    },
+    {
+      "trace_id": "trace-125709800-026",
+      "timestamp": "2026-04-13T16:10:17Z",
+      "spans": [
+        {
+          "service": "email-sender",
+          "operation": "/api/v1/users",
+          "duration_ms": 7026,
+          "status": "ERROR",
+          "error": "OutOfMemoryError: resource unavailable"
+        }
+      ],
+      "relevant": true
+    },
+    {
+      "trace_id": "trace-125709800-027",
+      "timestamp": "2026-04-13T16:17:08Z",
+      "spans": [
+        {
+          "service": "payment-gateway",
+          "operation": "/api/v1/search",
+          "duration_ms": 7648,
+          "status": "SLOW",
+          "error": "upstream email-sender timeout"
+        }
+      ],
+      "relevant": false
+    },
+    {
+      "trace_id": "trace-125709800-028",
+      "timestamp": "2026-04-13T16:24:00Z",
+      "spans": [
+        {
+          "service": "order-manager",
+          "operation": "/api/v1/users",
+          "duration_ms": 4824,
+          "status": "SLOW",
+          "error": "upstream email-sender timeout"
+        }
+      ],
+      "relevant": false
+    },
+    {
+      "trace_id": "trace-125709800-029",
+      "timestamp": "2026-04-13T16:30:51Z",
+      "spans": [
+        {
+          "service": "api-gateway",
+          "operation": "/internal/health",
+          "duration_ms": 5083,
+          "status": "ERROR",
+          "error": "upstream email-sender timeout"
+        },
+        {
+          "service": "order-manager",
+          "operation": "/internal/health",
+          "duration_ms": 7558,
+          "status": "ERROR",
+          "error": "upstream email-sender timeout"
+        }
+      ],
+      "relevant": false
+    },
+    {
+      "trace_id": "trace-125709800-030",
+      "timestamp": "2026-04-13T16:37:42Z",
+      "spans": [
+        {
+          "service": "payment-gateway",
+          "operation": "/internal/data/query",
+          "duration_ms": 7964,
+          "status": "ERROR",
+          "error": "upstream email-sender timeout"
+        }
+      ],
+      "relevant": false
+    },
+    {
+      "trace_id": "trace-125709800-031",
+      "timestamp": "2026-04-13T16:44:34Z",
+      "spans": [
+        {
+          "service": "payment-gateway",
+          "operation": "/api/v1/dashboard",
+          "duration_ms": 7264,
+          "status": "SLOW",
+          "error": "upstream email-sender timeout"
+        },
+        {
+          "service": "checkout",
+          "operation": "/internal/health",
+          "duration_ms": 5711,
+          "status": "SLOW",
+          "error": "upstream email-sender timeout"
+        },
+        {
+          "service": "notification-worker",
+          "operation": "/internal/health",
+          "duration_ms": 3319,
+          "status": "SLOW",
+          "error": "upstream email-sender timeout"
+        }
+      ],
+      "relevant": false
+    },
+    {
+      "trace_id": "trace-125709800-032",
+      "timestamp": "2026-04-13T16:51:25Z",
+      "spans": [
+        {
+          "service": "user-profile",
+          "operation": "/api/v1/users",
+          "duration_ms": 4050,
+          "status": "ERROR",
+          "error": "upstream email-sender timeout"
+        },
+        {
+          "service": "payment-gateway",
+          "operation": "/internal/data/query",
+          "duration_ms": 4573,
+          "status": "ERROR",
+          "error": "upstream email-sender timeout"
+        },
+        {
+          "service": "order-manager",
+          "operation": "/internal/data/query",
+          "duration_ms": 7162,
+          "status": "ERROR",
+          "error": "upstream email-sender timeout"
+        }
+      ],
+      "relevant": false
+    },
+    {
+      "trace_id": "trace-125709800-033",
+      "timestamp": "2026-04-13T16:58:17Z",
+      "spans": [
+        {
+          "service": "api-gateway",
+          "operation": "/api/v1/auth/validate",
+          "duration_ms": 7980,
+          "status": "ERROR",
+          "error": "upstream email-sender timeout"
+        },
+        {
+          "service": "checkout",
+          "operation": "/internal/batch/process",
+          "duration_ms": 5379,
+          "status": "ERROR",
+          "error": "upstream email-sender timeout"
+        },
+        {
+          "service": "redis-cache",
+          "operation": "/internal/metrics",
+          "duration_ms": 4164,
+          "status": "ERROR",
+          "error": "upstream email-sender timeout"
+        }
+      ],
+      "relevant": false
+    },
+    {
+      "trace_id": "trace-125709800-034",
+      "timestamp": "2026-04-13T17:05:08Z",
+      "spans": [
+        {
+          "service": "metrics-collector",
+          "operation": "/api/v1/search",
+          "duration_ms": 4932,
+          "status": "SLOW",
+          "error": "upstream email-sender timeout"
+        },
+        {
+          "service": "email-sender",
+          "operation": "/api/v1/users",
+          "duration_ms": 9544,
+          "status": "ERROR",
+          "error": "OutOfMemoryError: resource unavailable"
+        },
+        {
+          "service": "recommendation",
+          "operation": "/api/v1/users",
+          "duration_ms": 5132,
+          "status": "SLOW",
+          "error": "upstream email-sender timeout"
+        }
+      ],
+      "relevant": true
+    }
+  ],
+  "commits": [
+    {
+      "hash": "commit-e6b62fde",
+      "service": "email-sender",
+      "timestamp": "2026-04-12T15:12:00Z",
+      "author": "bob@company.com",
+      "message": "perf: add caching layer for rate limiter",
+      "diff": "--- a/email-sender-service/rate_limiter.go\n+++ b/email-sender-service/rate_limiter.go\n+// Minor change in rate limiter",
+      "relevant": false
+    },
+    {
+      "hash": "commit-57f0252e",
+      "service": "redis-cache",
+      "timestamp": "2026-04-12T17:42:00Z",
+      "author": "frank@company.com",
+      "message": "feat: upgrade query engine dependency version",
+      "diff": "--- a/redis-cache-service/query_engine.go\n+++ b/redis-cache-service/query_engine.go\n+// Minor change in query engine",
+      "relevant": false
+    },
+    {
+      "hash": "commit-9bc83360",
+      "service": "recommendation",
+      "timestamp": "2026-04-12T20:12:00Z",
+      "author": "grace@company.com",
+      "message": "hotfix: refactor load balancer error handling",
+      "diff": "--- a/recommendation-service/load_balancer.go\n+++ b/recommendation-service/load_balancer.go\n+// Minor change in load balancer",
+      "relevant": false
+    },
+    {
+      "hash": "commit-7e7e87d9",
+      "service": "api-gateway",
+      "timestamp": "2026-04-12T22:42:00Z",
+      "author": "frank@company.com",
+      "message": "fix: optimize auth validator for high throughput",
+      "diff": "--- a/api-gateway-service/auth_validator.go\n+++ b/api-gateway-service/auth_validator.go\n+// Minor change in auth validator",
+      "relevant": false
+    },
+    {
+      "hash": "commit-2b0bc025",
+      "service": "payment-gateway",
+      "timestamp": "2026-04-13T01:12:00Z",
+      "author": "bob@company.com",
+      "message": "perf: introduce connection pool rate limiting",
+      "diff": "--- a/payment-gateway-service/connection_pool.go\n+++ b/payment-gateway-service/connection_pool.go\n+// Minor change in connection pool",
+      "relevant": false
+    },
+    {
+      "hash": "commit-7c76d0ed",
+      "service": "payment-gateway",
+      "timestamp": "2026-04-13T03:42:00Z",
+      "author": "alice@company.com",
+      "message": "hotfix: simplify query engine retry logic",
+      "diff": "--- a/payment-gateway-service/query_engine.go\n+++ b/payment-gateway-service/query_engine.go\n+// Minor change in query engine",
+      "relevant": false
+    },
+    {
+      "hash": "commit-b7f2f6ce",
+      "service": "recommendation",
+      "timestamp": "2026-04-13T06:12:00Z",
+      "author": "alice@company.com",
+      "message": "chore: update load balancer connection parameters",
+      "diff": "--- a/recommendation-service/load_balancer.go\n+++ b/recommendation-service/load_balancer.go\n+// Minor change in load balancer",
+      "relevant": false
+    },
+    {
+      "hash": "commit-3ac19d5a",
+      "service": "payment-gateway",
+      "timestamp": "2026-04-13T08:42:00Z",
+      "author": "dave@company.com",
+      "message": "chore: upgrade cache layer dependency version",
+      "diff": "--- a/payment-gateway-service/cache_layer.go\n+++ b/payment-gateway-service/cache_layer.go\n+// Minor change in cache layer",
+      "relevant": false
+    },
+    {
+      "hash": "commit-b6caf11b",
+      "service": "email-sender",
+      "timestamp": "2026-04-13T11:12:00Z",
+      "author": "alice@company.com",
+      "message": "hotfix: migrate to new circuit breaker library",
+      "diff": "--- a/email-sender-service/circuit_breaker.go\n+++ b/email-sender-service/circuit_breaker.go\n-// Old: stable configuration\n-config.MaxSize = 100\n-config.Timeout = 30 * time.Second\n+// New: reduced limits for 'optimization'\n+config.MaxSize = 16\n+config.Timeout = 5 * time.Second\n+// WARNING: This may cause issues under high load",
+      "relevant": true
+    },
+    {
+      "hash": "commit-54b8161d",
+      "service": "user-profile",
+      "timestamp": "2026-04-13T13:42:00Z",
+      "author": "alice@company.com",
+      "message": "chore: upgrade connection pool dependency version",
+      "diff": "--- a/user-profile-service/connection_pool.go\n+++ b/user-profile-service/connection_pool.go\n+// Minor change in connection pool",
+      "relevant": false
+    }
+  ],
+  "config_changes": [
+    {
+      "config_id": "cfg-125709800-000",
+      "service": "email-sender",
+      "timestamp": "2026-04-12T15:12:00Z",
+      "key": "RETRY_COUNT",
+      "old_value": "42",
+      "new_value": "56",
+      "description": "Adjusted RETRY_COUNT for routine maintenance",
+      "relevant": false
+    },
+    {
+      "config_id": "cfg-125709800-001",
+      "service": "payment-gateway",
+      "timestamp": "2026-04-12T16:59:08Z",
+      "key": "TIMEOUT_MS",
+      "old_value": "20",
+      "new_value": "53",
+      "description": "Adjusted TIMEOUT_MS for routine maintenance",
+      "relevant": false
+    },
+    {
+      "config_id": "cfg-125709800-002",
+      "service": "notification-worker",
+      "timestamp": "2026-04-12T18:46:17Z",
+      "key": "MAX_CONNECTIONS",
+      "old_value": "38",
+      "new_value": "12",
+      "description": "Adjusted MAX_CONNECTIONS for routine maintenance",
+      "relevant": false
+    },
+    {
+      "config_id": "cfg-125709800-003",
+      "service": "notification-worker",
+      "timestamp": "2026-04-12T20:33:25Z",
+      "key": "RETRY_COUNT",
+      "old_value": "75",
+      "new_value": "11",
+      "description": "Adjusted RETRY_COUNT for routine maintenance",
+      "relevant": false
+    },
+    {
+      "config_id": "cfg-125709800-004",
+      "service": "redis-cache",
+      "timestamp": "2026-04-12T22:20:34Z",
+      "key": "MAX_CONNECTIONS",
+      "old_value": "79",
+      "new_value": "52",
+      "description": "Adjusted MAX_CONNECTIONS for routine maintenance",
+      "relevant": false
+    },
+    {
+      "config_id": "cfg-125709800-005",
+      "service": "email-sender",
+      "timestamp": "2026-04-13T00:07:42Z",
+      "key": "CACHE_TTL",
+      "old_value": "43",
+      "new_value": "24",
+      "description": "Adjusted CACHE_TTL for routine maintenance",
+      "relevant": false
+    },
+    {
+      "config_id": "cfg-125709800-006",
+      "service": "order-manager",
+      "timestamp": "2026-04-13T01:54:51Z",
+      "key": "HEALTH_CHECK_INTERVAL",
+      "old_value": "23",
+      "new_value": "40",
+      "description": "Adjusted HEALTH_CHECK_INTERVAL for routine maintenance",
+      "relevant": false
+    },
+    {
+      "config_id": "cfg-125709800-007",
+      "service": "api-gateway",
+      "timestamp": "2026-04-13T03:42:00Z",
+      "key": "QUEUE_DEPTH",
+      "old_value": "31",
+      "new_value": "74",
+      "description": "Adjusted QUEUE_DEPTH for routine maintenance",
+      "relevant": false
+    },
+    {
+      "config_id": "cfg-125709800-008",
+      "service": "api-gateway",
+      "timestamp": "2026-04-13T05:29:08Z",
+      "key": "MAX_CONNECTIONS",
+      "old_value": "100",
+      "new_value": "96",
+      "description": "Adjusted MAX_CONNECTIONS for routine maintenance",
+      "relevant": false
+    },
+    {
+      "config_id": "cfg-125709800-009",
+      "service": "user-profile",
+      "timestamp": "2026-04-13T07:16:17Z",
+      "key": "RETRY_COUNT",
+      "old_value": "80",
+      "new_value": "53",
+      "description": "Adjusted RETRY_COUNT for routine maintenance",
+      "relevant": false
+    },
+    {
+      "config_id": "cfg-125709800-010",
+      "service": "payment-gateway",
+      "timestamp": "2026-04-13T09:03:25Z",
+      "key": "BATCH_SIZE",
+      "old_value": "97",
+      "new_value": "68",
+      "description": "Adjusted BATCH_SIZE for routine maintenance",
+      "relevant": false
+    },
+    {
+      "config_id": "cfg-125709800-011",
+      "service": "checkout",
+      "timestamp": "2026-04-13T10:50:34Z",
+      "key": "RATE_LIMIT",
+      "old_value": "84",
+      "new_value": "79",
+      "description": "Adjusted RATE_LIMIT for routine maintenance",
+      "relevant": false
+    },
+    {
+      "config_id": "cfg-125709800-012",
+      "service": "fraud-detector",
+      "timestamp": "2026-04-13T12:37:42Z",
+      "key": "LOG_LEVEL",
+      "old_value": "30",
+      "new_value": "52",
+      "description": "Adjusted LOG_LEVEL for routine maintenance",
+      "relevant": false
+    },
+    {
+      "config_id": "cfg-125709800-013",
+      "service": "redis-cache",
+      "timestamp": "2026-04-13T14:24:51Z",
+      "key": "LOG_LEVEL",
+      "old_value": "36",
+      "new_value": "14",
+      "description": "Adjusted LOG_LEVEL for routine maintenance",
+      "relevant": false
+    }
+  ],
+  "infra_events": [
+    {
+      "event_id": "infra-125709800-000",
+      "timestamp": "2026-04-13T03:12:00Z",
+      "type": "storage_migration",
+      "description": "Routine storage migration completed. No impact reported.",
+      "relevant": false
+    },
+    {
+      "event_id": "infra-125709800-001",
+      "timestamp": "2026-04-13T06:42:00Z",
+      "type": "scaling_event",
+      "description": "Routine scaling event completed. No impact reported.",
+      "relevant": false
+    },
+    {
+      "event_id": "infra-125709800-002",
+      "timestamp": "2026-04-13T10:12:00Z",
+      "type": "certificate_rotation",
+      "description": "Routine certificate rotation completed. No impact reported.",
+      "relevant": false
+    },
+    {
+      "event_id": "infra-125709800-003",
+      "timestamp": "2026-04-13T13:42:00Z",
+      "type": "load_balancer_drain",
+      "description": "Routine load balancer drain completed. No impact reported.",
+      "relevant": false
+    }
+  ],
+  "relevant_fact_ids": [
+    "log-pay-125709800-012",
+    "log-fra-125709800-013",
+    "log-fra-125709800-016",
+    "log-fra-125709800-017",
+    "log-fra-125709800-018",
+    "log-red-125709800-014",
+    "log-red-125709800-015",
+    "log-che-125709800-012",
+    "log-che-125709800-014",
+    "log-not-125709800-012",
+    "log-not-125709800-014",
+    "log-not-125709800-015",
+    "log-api-125709800-016",
+    "log-api-125709800-018",
+    "log-met-125709800-016",
+    "log-ord-125709800-012",
+    "log-ord-125709800-014",
+    "log-ema-125709800-013",
+    "log-ema-125709800-014",
+    "log-ema-125709800-015",
+    "log-ema-125709800-016",
+    "log-ema-125709800-017",
+    "log-ema-125709800-018",
+    "log-use-125709800-016",
+    "log-use-125709800-018",
+    "trace-125709800-020",
+    "trace-125709800-022",
+    "trace-125709800-026",
+    "trace-125709800-034",
+    "commit-b6caf11b"
+  ],
+  "ground_truth": {
+    "cause": "commit-b6caf11b",
+    "cause_type": "commit",
+    "chain": [
+      {
+        "service": "email-sender",
+        "effect": "oom_crash_loop"
+      },
+      {
+        "service": "email-sender",
+        "effect": "dependency_timeout"
+      },
+      {
+        "service": "email-sender",
+        "effect": "service_degradation"
+      },
+      {
+        "service": "email-sender",
+        "effect": "complete_unavailability"
+      }
+    ]
+  }
+}

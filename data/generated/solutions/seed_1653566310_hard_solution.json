@@ -1,0 +1,82 @@
+{
+  "task_id": "seed_1653566310_hard",
+  "ground_truth": {
+    "cause": "cfg-1653566310-013",
+    "cause_type": "config",
+    "chain": [
+      {
+        "service": "user-profile",
+        "effect": "resource_limit_exceeded"
+      },
+      {
+        "service": "user-profile",
+        "effect": "cascading_timeout"
+      },
+      {
+        "service": "user-profile",
+        "effect": "user_facing_errors"
+      }
+    ]
+  },
+  "optimal_action_sequence": [
+    {
+      "action_type": "query_logs",
+      "service": "user-profile",
+      "keyword": "error",
+      "reason": "Investigate user-profile \u2014 highest error rate"
+    },
+    {
+      "action_type": "query_logs",
+      "service": "user-profile",
+      "keyword": "deploy",
+      "reason": "Check recent deployments"
+    },
+    {
+      "action_type": "fetch_trace",
+      "trace_id": "trace-1653566310-015",
+      "reason": "Get cascade trace during incident"
+    },
+    {
+      "action_type": "hypothesize",
+      "cause_entity_id": "cfg-1653566310-013",
+      "reason": "Test root cause hypothesis"
+    },
+    {
+      "action_type": "explain_chain",
+      "chain": [
+        {
+          "service": "user-profile",
+          "effect": "resource_limit_exceeded"
+        },
+        {
+          "service": "user-profile",
+          "effect": "cascading_timeout"
+        },
+        {
+          "service": "user-profile",
+          "effect": "user_facing_errors"
+        }
+      ],
+      "reason": "Verify causal chain"
+    },
+    {
+      "action_type": "submit",
+      "final_cause": "cfg-1653566310-013",
+      "final_chain": [
+        {
+          "service": "user-profile",
+          "effect": "resource_limit_exceeded"
+        },
+        {
+          "service": "user-profile",
+          "effect": "cascading_timeout"
+        },
+        {
+          "service": "user-profile",
+          "effect": "user_facing_errors"
+        }
+      ],
+      "reason": "Confident in root cause and chain"
+    }
+  ]
+}

@@ -1,0 +1,115 @@
+{
+  "task_id": "seed_2087739109_hard",
+  "ground_truth": {
+    "cause": "commit-5a9a4d2e+infra-2087739109-000",
+    "cause_type": "correlated",
+    "chain": [
+      {
+        "service": "auth-service",
+        "effect": "network_degradation"
+      },
+      {
+        "service": "auth-service",
+        "effect": "failover_triggered"
+      },
+      {
+        "service": "checkout",
+        "effect": "connection_failure"
+      },
+      {
+        "service": "checkout",
+        "effect": "zero_connections_state"
+      },
+      {
+        "service": "metrics-collector",
+        "effect": "complete_service_failure"
+      }
+    ],
+    "contributing_causes": [
+      "commit-5a9a4d2e",
+      "infra-2087739109-000"
+    ]
+  },
+  "optimal_action_sequence": [
+    {
+      "action_type": "query_logs",
+      "service": "auth-service",
+      "keyword": "error",
+      "reason": "Investigate auth-service \u2014 highest error rate"
+    },
+    {
+      "action_type": "query_logs",
+      "service": "auth-service",
+      "keyword": "deploy",
+      "reason": "Check recent deployments"
+    },
+    {
+      "action_type": "diff_commit",
+      "commit_hash": "commit-5a9a4d2e",
+      "reason": "Most suspicious commit near incident"
+    },
+    {
+      "action_type": "fetch_trace",
+      "trace_id": "trace-2087739109-034",
+      "reason": "Get cascade trace during incident"
+    },
+    {
+      "action_type": "hypothesize",
+      "cause_entity_id": "commit-5a9a4d2e+infra-2087739109-000",
+      "reason": "Test root cause hypothesis"
+    },
+    {
+      "action_type": "explain_chain",
+      "chain": [
+        {
+          "service": "auth-service",
+          "effect": "network_degradation"
+        },
+        {
+          "service": "auth-service",
+          "effect": "failover_triggered"
+        },
+        {
+          "service": "checkout",
+          "effect": "connection_failure"
+        },
+        {
+          "service": "checkout",
+          "effect": "zero_connections_state"
+        },
+        {
+          "service": "metrics-collector",
+          "effect": "complete_service_failure"
+        }
+      ],
+      "reason": "Verify causal chain"
+    },
+    {
+      "action_type": "submit",
+      "final_cause": "commit-5a9a4d2e+infra-2087739109-000",
+      "final_chain": [
+        {
+          "service": "auth-service",
+          "effect": "network_degradation"
+        },
+        {
+          "service": "auth-service",
+          "effect": "failover_triggered"
+        },
+        {
+          "service": "checkout",
+          "effect": "connection_failure"
+        },
+        {
+          "service": "checkout",
+          "effect": "zero_connections_state"
+        },
+        {
+          "service": "metrics-collector",
+          "effect": "complete_service_failure"
+        }
+      ],
+      "reason": "Confident in root cause and chain"
+    }
+  ]
+}

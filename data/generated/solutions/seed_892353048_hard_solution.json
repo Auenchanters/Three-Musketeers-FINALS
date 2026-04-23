@@ -1,0 +1,99 @@
+{
+  "task_id": "seed_892353048_hard",
+  "ground_truth": {
+    "cause": "commit-68106231",
+    "cause_type": "commit",
+    "chain": [
+      {
+        "service": "notification-worker",
+        "effect": "oom_crash_loop"
+      },
+      {
+        "service": "notification-worker",
+        "effect": "dependency_timeout"
+      },
+      {
+        "service": "notification-worker",
+        "effect": "service_degradation"
+      },
+      {
+        "service": "notification-worker",
+        "effect": "complete_unavailability"
+      }
+    ]
+  },
+  "optimal_action_sequence": [
+    {
+      "action_type": "query_logs",
+      "service": "notification-worker",
+      "keyword": "error",
+      "reason": "Investigate notification-worker \u2014 highest error rate"
+    },
+    {
+      "action_type": "query_logs",
+      "service": "notification-worker",
+      "keyword": "deploy",
+      "reason": "Check recent deployments"
+    },
+    {
+      "action_type": "diff_commit",
+      "commit_hash": "commit-68106231",
+      "reason": "Most suspicious commit near incident"
+    },
+    {
+      "action_type": "fetch_trace",
+      "trace_id": "trace-892353048-032",
+      "reason": "Get cascade trace during incident"
+    },
+    {
+      "action_type": "hypothesize",
+      "cause_entity_id": "commit-68106231",
+      "reason": "Test root cause hypothesis"
+    },
+    {
+      "action_type": "explain_chain",
+      "chain": [
+        {
+          "service": "notification-worker",
+          "effect": "oom_crash_loop"
+        },
+        {
+          "service": "notification-worker",
+          "effect": "dependency_timeout"
+        },
+        {
+          "service": "notification-worker",
+          "effect": "service_degradation"
+        },
+        {
+          "service": "notification-worker",
+          "effect": "complete_unavailability"
+        }
+      ],
+      "reason": "Verify causal chain"
+    },
+    {
+      "action_type": "submit",
+      "final_cause": "commit-68106231",
+      "final_chain": [
+        {
+          "service": "notification-worker",
+          "effect": "oom_crash_loop"
+        },
+        {
+          "service": "notification-worker",
+          "effect": "dependency_timeout"
+        },
+        {
+          "service": "notification-worker",
+          "effect": "service_degradation"
+        },
+        {
+          "service": "notification-worker",
+          "effect": "complete_unavailability"
+        }
+      ],
+      "reason": "Confident in root cause and chain"
+    }
+  ]
+}

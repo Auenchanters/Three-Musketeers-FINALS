@@ -35,7 +35,7 @@ class TestGenerateScenario:
     def test_easy_generation(self):
         scenario = generate_scenario(100, "easy")
         assert scenario["max_steps"] == 40
-        assert len(scenario["services"]) == 4
+        assert 4 <= len(scenario["services"]) <= 6
         assert len(scenario["ground_truth"]["chain"]) >= 2
 
     def test_medium_generation(self):
@@ -46,18 +46,14 @@ class TestGenerateScenario:
         scenario = generate_scenario(100, "hard")
         assert scenario["max_steps"] == 120
 
-    def test_has_four_services(self):
+    def test_has_minimum_services(self):
         for seed in [1, 42, 99, 200]:
             scenario = generate_scenario(seed, "easy")
-            assert len(scenario["service_graph"]) == 4
-            assert "frontend" in scenario["service_graph"]
-            assert "auth" in scenario["service_graph"]
-            assert "data" in scenario["service_graph"]
-            assert "batch" in scenario["service_graph"]
+            assert len(scenario["service_graph"]) >= 4
 
     def test_has_logs_for_all_services(self):
         scenario = generate_scenario(42, "medium")
-        for svc in ["frontend", "auth", "data", "batch"]:
+        for svc in scenario["service_graph"].keys():
             assert svc in scenario["logs"]
             assert len(scenario["logs"][svc]) > 0
 

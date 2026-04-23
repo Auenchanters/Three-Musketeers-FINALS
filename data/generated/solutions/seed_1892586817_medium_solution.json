@@ -1,0 +1,99 @@
+{
+  "task_id": "seed_1892586817_medium",
+  "ground_truth": {
+    "cause": "commit-03581dd8",
+    "cause_type": "commit",
+    "chain": [
+      {
+        "service": "fraud-detector",
+        "effect": "memory_leak_gc_pressure"
+      },
+      {
+        "service": "fraud-detector",
+        "effect": "response_latency_spike"
+      },
+      {
+        "service": "webhook-dispatcher",
+        "effect": "timeout_cascade"
+      },
+      {
+        "service": "api-gateway",
+        "effect": "circuit_breaker_open"
+      }
+    ]
+  },
+  "optimal_action_sequence": [
+    {
+      "action_type": "query_logs",
+      "service": "fraud-detector",
+      "keyword": "error",
+      "reason": "Investigate fraud-detector \u2014 highest error rate"
+    },
+    {
+      "action_type": "query_logs",
+      "service": "fraud-detector",
+      "keyword": "deploy",
+      "reason": "Check recent deployments"
+    },
+    {
+      "action_type": "diff_commit",
+      "commit_hash": "commit-03581dd8",
+      "reason": "Most suspicious commit near incident"
+    },
+    {
+      "action_type": "fetch_trace",
+      "trace_id": "trace-1892586817-016",
+      "reason": "Get cascade trace during incident"
+    },
+    {
+      "action_type": "hypothesize",
+      "cause_entity_id": "commit-03581dd8",
+      "reason": "Test root cause hypothesis"
+    },
+    {
+      "action_type": "explain_chain",
+      "chain": [
+        {
+          "service": "fraud-detector",
+          "effect": "memory_leak_gc_pressure"
+        },
+        {
+          "service": "fraud-detector",
+          "effect": "response_latency_spike"
+        },
+        {
+          "service": "webhook-dispatcher",
+          "effect": "timeout_cascade"
+        },
+        {
+          "service": "api-gateway",
+          "effect": "circuit_breaker_open"
+        }
+      ],
+      "reason": "Verify causal chain"
+    },
+    {
+      "action_type": "submit",
+      "final_cause": "commit-03581dd8",
+      "final_chain": [
+        {
+          "service": "fraud-detector",
+          "effect": "memory_leak_gc_pressure"
+        },
+        {
+          "service": "fraud-detector",
+          "effect": "response_latency_spike"
+        },
+        {
+          "service": "webhook-dispatcher",
+          "effect": "timeout_cascade"
+        },
+        {
+          "service": "api-gateway",
+          "effect": "circuit_breaker_open"
+        }
+      ],
+      "reason": "Confident in root cause and chain"
+    }
+  ]
+}

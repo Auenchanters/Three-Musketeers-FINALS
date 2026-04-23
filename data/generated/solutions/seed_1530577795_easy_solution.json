@@ -1,0 +1,99 @@
+{
+  "task_id": "seed_1530577795_easy",
+  "ground_truth": {
+    "cause": "commit-4b09c81b",
+    "cause_type": "commit",
+    "chain": [
+      {
+        "service": "payment-gateway",
+        "effect": "memory_leak_gc_pressure"
+      },
+      {
+        "service": "payment-gateway",
+        "effect": "response_latency_spike"
+      },
+      {
+        "service": "notification-worker",
+        "effect": "timeout_cascade"
+      },
+      {
+        "service": "pricing-engine",
+        "effect": "circuit_breaker_open"
+      }
+    ]
+  },
+  "optimal_action_sequence": [
+    {
+      "action_type": "query_logs",
+      "service": "payment-gateway",
+      "keyword": "error",
+      "reason": "Investigate payment-gateway \u2014 highest error rate"
+    },
+    {
+      "action_type": "query_logs",
+      "service": "payment-gateway",
+      "keyword": "deploy",
+      "reason": "Check recent deployments"
+    },
+    {
+      "action_type": "diff_commit",
+      "commit_hash": "commit-4b09c81b",
+      "reason": "Most suspicious commit near incident"
+    },
+    {
+      "action_type": "fetch_trace",
+      "trace_id": "trace-1530577795-009",
+      "reason": "Get cascade trace during incident"
+    },
+    {
+      "action_type": "hypothesize",
+      "cause_entity_id": "commit-4b09c81b",
+      "reason": "Test root cause hypothesis"
+    },
+    {
+      "action_type": "explain_chain",
+      "chain": [
+        {
+          "service": "payment-gateway",
+          "effect": "memory_leak_gc_pressure"
+        },
+        {
+          "service": "payment-gateway",
+          "effect": "response_latency_spike"
+        },
+        {
+          "service": "notification-worker",
+          "effect": "timeout_cascade"
+        },
+        {
+          "service": "pricing-engine",
+          "effect": "circuit_breaker_open"
+        }
+      ],
+      "reason": "Verify causal chain"
+    },
+    {
+      "action_type": "submit",
+      "final_cause": "commit-4b09c81b",
+      "final_chain": [
+        {
+          "service": "payment-gateway",
+          "effect": "memory_leak_gc_pressure"
+        },
+        {
+          "service": "payment-gateway",
+          "effect": "response_latency_spike"
+        },
+        {
+          "service": "notification-worker",
+          "effect": "timeout_cascade"
+        },
+        {
+          "service": "pricing-engine",
+          "effect": "circuit_breaker_open"
+        }
+      ],
+      "reason": "Confident in root cause and chain"
+    }
+  ]
+}

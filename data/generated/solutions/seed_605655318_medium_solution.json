@@ -1,0 +1,87 @@
+{
+  "task_id": "seed_605655318_medium",
+  "ground_truth": {
+    "cause": "commit-b041ba3d",
+    "cause_type": "commit",
+    "chain": [
+      {
+        "service": "auth-service",
+        "effect": "connection_pool_exhaustion"
+      },
+      {
+        "service": "pricing-engine",
+        "effect": "upstream_timeout"
+      },
+      {
+        "service": "api-gateway",
+        "effect": "5xx_errors_to_users"
+      }
+    ]
+  },
+  "optimal_action_sequence": [
+    {
+      "action_type": "query_logs",
+      "service": "auth-service",
+      "keyword": "error",
+      "reason": "Investigate auth-service \u2014 highest error rate"
+    },
+    {
+      "action_type": "query_logs",
+      "service": "auth-service",
+      "keyword": "deploy",
+      "reason": "Check recent deployments"
+    },
+    {
+      "action_type": "diff_commit",
+      "commit_hash": "commit-b041ba3d",
+      "reason": "Most suspicious commit near incident"
+    },
+    {
+      "action_type": "fetch_trace",
+      "trace_id": "trace-605655318-012",
+      "reason": "Get cascade trace during incident"
+    },
+    {
+      "action_type": "hypothesize",
+      "cause_entity_id": "commit-b041ba3d",
+      "reason": "Test root cause hypothesis"
+    },
+    {
+      "action_type": "explain_chain",
+      "chain": [
+        {
+          "service": "auth-service",
+          "effect": "connection_pool_exhaustion"
+        },
+        {
+          "service": "pricing-engine",
+          "effect": "upstream_timeout"
+        },
+        {
+          "service": "api-gateway",
+          "effect": "5xx_errors_to_users"
+        }
+      ],
+      "reason": "Verify causal chain"
+    },
+    {
+      "action_type": "submit",
+      "final_cause": "commit-b041ba3d",
+      "final_chain": [
+        {
+          "service": "auth-service",
+          "effect": "connection_pool_exhaustion"
+        },
+        {
+          "service": "pricing-engine",
+          "effect": "upstream_timeout"
+        },
+        {
+          "service": "api-gateway",
+          "effect": "5xx_errors_to_users"
+        }
+      ],
+      "reason": "Confident in root cause and chain"
+    }
+  ]
+}

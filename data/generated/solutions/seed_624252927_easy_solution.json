@@ -1,0 +1,82 @@
+{
+  "task_id": "seed_624252927_easy",
+  "ground_truth": {
+    "cause": "cfg-624252927-004",
+    "cause_type": "config",
+    "chain": [
+      {
+        "service": "recommendation",
+        "effect": "resource_limit_exceeded"
+      },
+      {
+        "service": "notification-worker",
+        "effect": "cascading_timeout"
+      },
+      {
+        "service": "notification-worker",
+        "effect": "user_facing_errors"
+      }
+    ]
+  },
+  "optimal_action_sequence": [
+    {
+      "action_type": "query_logs",
+      "service": "recommendation",
+      "keyword": "error",
+      "reason": "Investigate recommendation \u2014 highest error rate"
+    },
+    {
+      "action_type": "query_logs",
+      "service": "recommendation",
+      "keyword": "deploy",
+      "reason": "Check recent deployments"
+    },
+    {
+      "action_type": "fetch_trace",
+      "trace_id": "trace-624252927-009",
+      "reason": "Get cascade trace during incident"
+    },
+    {
+      "action_type": "hypothesize",
+      "cause_entity_id": "cfg-624252927-004",
+      "reason": "Test root cause hypothesis"
+    },
+    {
+      "action_type": "explain_chain",
+      "chain": [
+        {
+          "service": "recommendation",
+          "effect": "resource_limit_exceeded"
+        },
+        {
+          "service": "notification-worker",
+          "effect": "cascading_timeout"
+        },
+        {
+          "service": "notification-worker",
+          "effect": "user_facing_errors"
+        }
+      ],
+      "reason": "Verify causal chain"
+    },
+    {
+      "action_type": "submit",
+      "final_cause": "cfg-624252927-004",
+      "final_chain": [
+        {
+          "service": "recommendation",
+          "effect": "resource_limit_exceeded"
+        },
+        {
+          "service": "notification-worker",
+          "effect": "cascading_timeout"
+        },
+        {
+          "service": "notification-worker",
+          "effect": "user_facing_errors"
+        }
+      ],
+      "reason": "Confident in root cause and chain"
+    }
+  ]
+}

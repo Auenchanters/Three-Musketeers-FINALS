@@ -1,0 +1,99 @@
+{
+  "task_id": "seed_651428037_medium",
+  "ground_truth": {
+    "cause": "commit-519c85ba",
+    "cause_type": "commit",
+    "chain": [
+      {
+        "service": "search-index",
+        "effect": "memory_leak_gc_pressure"
+      },
+      {
+        "service": "search-index",
+        "effect": "response_latency_spike"
+      },
+      {
+        "service": "recommendation",
+        "effect": "timeout_cascade"
+      },
+      {
+        "service": "order-manager",
+        "effect": "circuit_breaker_open"
+      }
+    ]
+  },
+  "optimal_action_sequence": [
+    {
+      "action_type": "query_logs",
+      "service": "search-index",
+      "keyword": "error",
+      "reason": "Investigate search-index \u2014 highest error rate"
+    },
+    {
+      "action_type": "query_logs",
+      "service": "search-index",
+      "keyword": "deploy",
+      "reason": "Check recent deployments"
+    },
+    {
+      "action_type": "diff_commit",
+      "commit_hash": "commit-519c85ba",
+      "reason": "Most suspicious commit near incident"
+    },
+    {
+      "action_type": "fetch_trace",
+      "trace_id": "trace-651428037-015",
+      "reason": "Get cascade trace during incident"
+    },
+    {
+      "action_type": "hypothesize",
+      "cause_entity_id": "commit-519c85ba",
+      "reason": "Test root cause hypothesis"
+    },
+    {
+      "action_type": "explain_chain",
+      "chain": [
+        {
+          "service": "search-index",
+          "effect": "memory_leak_gc_pressure"
+        },
+        {
+          "service": "search-index",
+          "effect": "response_latency_spike"
+        },
+        {
+          "service": "recommendation",
+          "effect": "timeout_cascade"
+        },
+        {
+          "service": "order-manager",
+          "effect": "circuit_breaker_open"
+        }
+      ],
+      "reason": "Verify causal chain"
+    },
+    {
+      "action_type": "submit",
+      "final_cause": "commit-519c85ba",
+      "final_chain": [
+        {
+          "service": "search-index",
+          "effect": "memory_leak_gc_pressure"
+        },
+        {
+          "service": "search-index",
+          "effect": "response_latency_spike"
+        },
+        {
+          "service": "recommendation",
+          "effect": "timeout_cascade"
+        },
+        {
+          "service": "order-manager",
+          "effect": "circuit_breaker_open"
+        }
+      ],
+      "reason": "Confident in root cause and chain"
+    }
+  ]
+}

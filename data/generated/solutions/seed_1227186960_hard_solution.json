@@ -1,0 +1,115 @@
+{
+  "task_id": "seed_1227186960_hard",
+  "ground_truth": {
+    "cause": "commit-16bb3307+infra-1227186960-000",
+    "cause_type": "correlated",
+    "chain": [
+      {
+        "service": "api-gateway",
+        "effect": "network_degradation"
+      },
+      {
+        "service": "api-gateway",
+        "effect": "failover_triggered"
+      },
+      {
+        "service": "api-gateway",
+        "effect": "connection_failure"
+      },
+      {
+        "service": "api-gateway",
+        "effect": "zero_connections_state"
+      },
+      {
+        "service": "api-gateway",
+        "effect": "complete_service_failure"
+      }
+    ],
+    "contributing_causes": [
+      "commit-16bb3307",
+      "infra-1227186960-000"
+    ]
+  },
+  "optimal_action_sequence": [
+    {
+      "action_type": "query_logs",
+      "service": "api-gateway",
+      "keyword": "error",
+      "reason": "Investigate api-gateway \u2014 highest error rate"
+    },
+    {
+      "action_type": "query_logs",
+      "service": "api-gateway",
+      "keyword": "deploy",
+      "reason": "Check recent deployments"
+    },
+    {
+      "action_type": "diff_commit",
+      "commit_hash": "commit-16bb3307",
+      "reason": "Most suspicious commit near incident"
+    },
+    {
+      "action_type": "fetch_trace",
+      "trace_id": "trace-1227186960-019",
+      "reason": "Get cascade trace during incident"
+    },
+    {
+      "action_type": "hypothesize",
+      "cause_entity_id": "commit-16bb3307+infra-1227186960-000",
+      "reason": "Test root cause hypothesis"
+    },
+    {
+      "action_type": "explain_chain",
+      "chain": [
+        {
+          "service": "api-gateway",
+          "effect": "network_degradation"
+        },
+        {
+          "service": "api-gateway",
+          "effect": "failover_triggered"
+        },
+        {
+          "service": "api-gateway",
+          "effect": "connection_failure"
+        },
+        {
+          "service": "api-gateway",
+          "effect": "zero_connections_state"
+        },
+        {
+          "service": "api-gateway",
+          "effect": "complete_service_failure"
+        }
+      ],
+      "reason": "Verify causal chain"
+    },
+    {
+      "action_type": "submit",
+      "final_cause": "commit-16bb3307+infra-1227186960-000",
+      "final_chain": [
+        {
+          "service": "api-gateway",
+          "effect": "network_degradation"
+        },
+        {
+          "service": "api-gateway",
+          "effect": "failover_triggered"
+        },
+        {
+          "service": "api-gateway",
+          "effect": "connection_failure"
+        },
+        {
+          "service": "api-gateway",
+          "effect": "zero_connections_state"
+        },
+        {
+          "service": "api-gateway",
+          "effect": "complete_service_failure"
+        }
+      ],
+      "reason": "Confident in root cause and chain"
+    }
+  ]
+}

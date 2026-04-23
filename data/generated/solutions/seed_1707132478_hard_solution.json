@@ -1,0 +1,82 @@
+{
+  "task_id": "seed_1707132478_hard",
+  "ground_truth": {
+    "cause": "cfg-1707132478-009",
+    "cause_type": "config",
+    "chain": [
+      {
+        "service": "log-aggregator",
+        "effect": "resource_limit_exceeded"
+      },
+      {
+        "service": "fraud-detector",
+        "effect": "cascading_timeout"
+      },
+      {
+        "service": "api-gateway",
+        "effect": "user_facing_errors"
+      }
+    ]
+  },
+  "optimal_action_sequence": [
+    {
+      "action_type": "query_logs",
+      "service": "log-aggregator",
+      "keyword": "error",
+      "reason": "Investigate log-aggregator \u2014 highest error rate"
+    },
+    {
+      "action_type": "query_logs",
+      "service": "log-aggregator",
+      "keyword": "deploy",
+      "reason": "Check recent deployments"
+    },
+    {
+      "action_type": "fetch_trace",
+      "trace_id": "trace-1707132478-035",
+      "reason": "Get cascade trace during incident"
+    },
+    {
+      "action_type": "hypothesize",
+      "cause_entity_id": "cfg-1707132478-009",
+      "reason": "Test root cause hypothesis"
+    },
+    {
+      "action_type": "explain_chain",
+      "chain": [
+        {
+          "service": "log-aggregator",
+          "effect": "resource_limit_exceeded"
+        },
+        {
+          "service": "fraud-detector",
+          "effect": "cascading_timeout"
+        },
+        {
+          "service": "api-gateway",
+          "effect": "user_facing_errors"
+        }
+      ],
+      "reason": "Verify causal chain"
+    },
+    {
+      "action_type": "submit",
+      "final_cause": "cfg-1707132478-009",
+      "final_chain": [
+        {
+          "service": "log-aggregator",
+          "effect": "resource_limit_exceeded"
+        },
+        {
+          "service": "fraud-detector",
+          "effect": "cascading_timeout"
+        },
+        {
+          "service": "api-gateway",
+          "effect": "user_facing_errors"
+        }
+      ],
+      "reason": "Confident in root cause and chain"
+    }
+  ]
+}
