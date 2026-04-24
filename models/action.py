@@ -12,6 +12,7 @@ class ActionType(str, Enum):
     FETCH_TRACE = "fetch_trace"
     DIFF_COMMIT = "diff_commit"
     INSPECT_CONFIG = "inspect_config"
+    INSPECT_INFRA = "inspect_infra"
     HYPOTHESIZE = "hypothesize"
     EXPLAIN_CHAIN = "explain_chain"
     SUBMIT = "submit"
@@ -28,6 +29,7 @@ class Action(BaseAction):
     - fetch_trace: trace_id
     - diff_commit: commit_hash
     - inspect_config: config_id
+    - inspect_infra: event_id
     - hypothesize: cause_entity_id
     - explain_chain: chain (ordered list of {service, effect})
     - submit: final_cause, final_chain
@@ -47,6 +49,9 @@ class Action(BaseAction):
 
     # inspect_config parameters
     config_id: Optional[str] = Field(default=None, description="Config change ID to inspect")
+
+    # inspect_infra parameters
+    event_id: Optional[str] = Field(default=None, description="Infrastructure event ID to inspect")
 
     # hypothesize parameters
     cause_entity_id: Optional[str] = Field(default=None, description="Entity ID for hypothesis (e.g. 'commit-abc123')")

@@ -128,11 +128,15 @@ class RandomAgent:
         commits = [c["hash"] for c in obs.available_commits]
         configs = [c["config_id"] for c in obs.available_config_changes]
         traces = list(obs.available_trace_ids)
+        infra_events = [e["event_id"] for e in obs.available_infra_events]
 
         i = 0
         while not obs.done and i < obs.max_steps:
             i += 1
-            action = self._sample(services, keywords, commits, configs, traces, i, obs.max_steps)
+            action = self._sample(
+                services, keywords, commits, configs, traces, i, obs.max_steps,
+                infra_events=infra_events,
+            )
             step_dict = action.model_dump(exclude_none=True)
             obs = env.step(action)
             yield {
@@ -160,22 +164,29 @@ class RandomAgent:
         traces: list[str],
         step: int,
         max_steps: int,
+        infra_events: list[str] | None = None,
     ) -> Action:
         if step >= max_steps - 1:
             return Action(action_type=ActionType.SUBMIT, final_cause="", final_chain=[])
+        infra_events = infra_events or []
         roll = self._rng.random()
-        if roll < 0.55:
+        if roll < 0.50:
             return Action(
                 action_type=ActionType.QUERY_LOGS,
                 service=self._rng.choice(services) if services else "data",
                 keyword=self._rng.choice(keywords),
             )
-        if roll < 0.70 and traces:
+        if roll < 0.65 and traces:
             return Action(action_type=ActionType.FETCH_TRACE, trace_id=self._rng.choice(traces))
-        if roll < 0.82 and commits:
+        if roll < 0.77 and commits:
             return Action(action_type=ActionType.DIFF_COMMIT, commit_hash=self._rng.choice(commits))
-        if roll < 0.90 and configs:
+        if roll < 0.85 and configs:
             return Action(action_type=ActionType.INSPECT_CONFIG, config_id=self._rng.choice(configs))
+        if roll < 0.91 and infra_events:
+            return Action(
+                action_type=ActionType.INSPECT_INFRA,
+                event_id=self._rng.choice(infra_events),
+            )
         if roll < 0.96 and commits:
             return Action(
                 action_type=ActionType.HYPOTHESIZE,
@@ -198,15 +209,16 @@ SYSTEM_PROMPT = """You are an SRE investigating a cloud outage. You see a frozen
 Output ONLY a single compact JSON object, no prose, no markdown.
 
 Actions:
-  {"action_type":"query_logs","service":"<name>","keyword":"<word>"}
+  {"action_type":"query_logs","service":"<name>","keyword":"<word>","time_window":"last_5m"}
   {"action_type":"fetch_trace","trace_id":"<id>"}
   {"action_type":"diff_commit","commit_hash":"<hash>"}
   {"action_type":"inspect_config","config_id":"<id>"}
+  {"action_type":"inspect_infra","event_id":"<id>"}
   {"action_type":"hypothesize","cause_entity_id":"<id>"}
   {"action_type":"explain_chain","chain":[{"service":"<s>","effect":"<e>"}, ...]}
   {"action_type":"submit","final_cause":"<id>","final_chain":[{"service":"<s>","effect":"<e>"}, ...]}
 
-Strategy: start at the service with errors in the incident window → diff recent commits there → inspect configs / traces → hypothesize, then explain_chain, then submit. Spend steps like money. No repeats.""".strip()
+Strategy: start at the service with errors in the incident window → diff recent commits there → inspect configs / traces / infra events → hypothesize, then explain_chain, then submit. Spend steps like money. No repeats.""".strip()
 
 
 def _first_user_turn(obs_seed: dict[str, Any]) -> str:

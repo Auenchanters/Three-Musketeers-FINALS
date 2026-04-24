@@ -26,8 +26,54 @@ tags:
 > *Theme 3.1: World Modeling (Professional) | Meta PyTorch OpenEnv Hackathon Apr '26*
 > *By Three Musketeers (Utkarsh, Mohit, Tanush)*
 
-| 📹 [Demo Video](https://youtu.be/PLACEHOLDER) | 📝 [HF Blog Post](https://huggingface.co/spaces/three-musketeers/PostmortemEnv) | 🤗 [Live Space](https://huggingface.co/spaces/three-musketeers/PostmortemEnv) |
-|---|---|---|
+<!--
+  HERO SLOT — once docs/demo.gif exists, the line below renders the live
+  investigation console as the first thing judges see. The image link
+  degrades gracefully if the file is missing.
+-->
+![PostmortemEnv live investigation console](docs/demo.gif)
+
+<sub>↑ Live investigation console: pick a task, watch an agent query logs / diff commits / submit a hypothesis in real time. (See [static/](static/) for the source.)</sub>
+
+## Deliverables
+
+| Resource | Link |
+|---|---|
+| 🤗 **Live OpenEnv Space** (Docker) | <https://huggingface.co/spaces/three-musketeers/PostmortemEnv> |
+| 📓 **Training notebook (Colab)** | [`train_notebook.ipynb`](train_notebook.ipynb) · [`train_notebook.py`](train_notebook.py) (Python script form) · [`run_real_training.py`](run_real_training.py) (CPU/MPS smoke training) |
+| 📝 **Writeup / mini-blog** | [`blog_post.md`](blog_post.md) |
+| 📹 **Demo video (≤ 2 min)** | <https://youtu.be/PLACEHOLDER> <!-- TODO: replace PLACEHOLDER with the real unlisted YouTube URL before submission --> |
+| 📊 **Committed plots** | [`training_data/reward_curves.png`](training_data/reward_curves.png) (loss + reward + per-difficulty + agent comparison) · [`training_data/agent_comparison.png`](training_data/agent_comparison.png) (regenerate with `python scripts/plot_agent_comparison.py`) |
+| 🧪 **Frontier-model benchmark** | [`scripts/run_frontier_benchmark.py`](scripts/run_frontier_benchmark.py) → [`training_data/frontier_results.json`](training_data/frontier_results.json) |
+
+## TL;DR — the headline numbers
+
+| Agent | Mean reward (10 seeds × 3 difficulties) | Notes |
+|---|---:|---|
+| Random baseline | **0.101** | Lower bound — proves the env has signal |
+| SFT (`opt-125m`, 60 demos, 3 epochs) | 0.160 | First pass on a tiny base model — pipeline works end-to-end; real lift expected from a 1B-param instruct model (see [Training Pipeline](#training-pipeline)) |
+| **Oracle (deterministic optimal)** | **0.979** | Upper bound — our hand-built solver |
+| **Reward gap (Oracle − Random)** | **0.878** | The training headroom available to any policy |
+
+Source: [`training_data/evaluation_results.json`](training_data/evaluation_results.json) and [`training_data/sft_eval_results.json`](training_data/sft_eval_results.json). Re-run with `python train.py evaluate --n-seeds 10` and `python run_real_training.py`. Frontier-model rows (Claude Haiku, GPT-4o-mini, Llama-3.2-1B) populate via [`scripts/run_frontier_benchmark.py`](scripts/run_frontier_benchmark.py) → [`training_data/frontier_results.json`](training_data/frontier_results.json).
+
+## Same task, two agents — `task1_recent_deploy` (a connection-pool regression)
+
+```text
+ORACLE (final_score = 0.960, 8 steps)         │  RANDOM (final_score = 0.155, 9 steps)
+──────────────────────────────────────────────│──────────────────────────────────────────────
+1  query_logs   data    "error"      r=0.135  │  1  query_logs   frontend  "error"   r=0.085
+2  query_logs   data    "deploy"     r=0.035  │  2  query_logs   data      "deploy"  r=0.035
+3  diff_commit  commit-a1b2c3        r=0.035  │  3  query_logs   auth      "deploy"  r=0.010
+4  query_logs   data    "connection" r=0.185  │  4  query_logs   frontend  "error"   r=0.010
+5  fetch_trace  trace-001            r=0.035  │  5  query_logs   batch     "error"   r=0.010
+6  hypothesize  commit-a1b2c3        r=0.015  │  6  query_logs   frontend  "error"   r=0.010
+7  explain_chain                     r=0.015  │  7  query_logs   auth      "deploy"  r=0.010
+8  submit       commit-a1b2c3 + chain r=0.960 │  8  query_logs   frontend  "deploy"  r=0.010
+                                              │  9  submit       "unknown"           r=0.155
+```
+
+Oracle climbs the dependency graph, then submits. Random spams `query_logs` until budget runs out and gives up. The environment's reward signal cleanly separates them — that's what makes it trainable. Reproduce with `python test_oracle_e2e.py` (oracle) and a 1-line random-agent loop.
 
 ---
 

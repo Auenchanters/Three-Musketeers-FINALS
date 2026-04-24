@@ -38,39 +38,15 @@ SYSTEM_PROMPT = (
 # =====================================================================
 
 def _reset_with_scenario(env, scenario):
-    """Reset environment directly with a scenario dict."""
-    env._task_id = scenario["task_id"]
-    env._difficulty = scenario["task_difficulty"]
-    env._task_description = scenario["task_description"]
-    env._max_steps = scenario["max_steps"]
-    env._service_graph = scenario["service_graph"]
-    env._services = scenario["services"]
-    env._incident_window = scenario["incident_window"]
-    env._logs = scenario["logs"]
-    env._traces = scenario["traces"]
-    env._commits = scenario["commits"]
-    env._config_changes = scenario["config_changes"]
-    env._infra_events = scenario["infra_events"]
+    """Reset env with a scenario dict and return the observation as a dict.
 
-    gt = scenario["ground_truth"]
-    env._ground_truth_cause = gt["cause"]
-    env._ground_truth_cause_type = gt.get("cause_type", "commit")
-    env._ground_truth_chain = gt["chain"]
-    env._contributing_causes = gt.get("contributing_causes", [])
-    env._relevant_fact_ids = set(scenario.get("relevant_fact_ids", []))
-
-    env._facts_discovered = set()
-    env._known_facts = []
-    env._hypotheses_submitted = []
-    env._wrong_hypotheses = 0
-    env._steps_taken = 0
-    env._done = False
-    env._message = "Investigation started. " + env._task_description
-    env._last_query_result = ""
-    env._final_score = None
-    env._initialized = True
-
-    return env._build_observation(reward=0.01, done=False).model_dump()
+    Thin shim around :meth:`PostmortemEnvironment.reset_from_scenario` kept
+    so existing callers and ``train_notebook.py`` (which imports this name)
+    continue to work without changes. New code should call
+    ``env.reset_from_scenario(scenario)`` directly and call ``.model_dump()``
+    on the returned ``Observation`` if a dict is needed.
+    """
+    return env.reset_from_scenario(scenario).model_dump()
 
 
 def _format_obs_compact(obs_dict):
@@ -354,6 +330,33 @@ def run_grpo(
     from models.action import Action
     from data.seed_generator import generate_scenario, generate_oracle_solution
 
+    # Model + tokenizer (loaded early so we can use the chat template for prompts)
+    tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
+    if tokenizer.pad_token is None:
+        tokenizer.pad_token = tokenizer.eos_token
+
+    def _format_prompt(observation_text: str) -> str:
+        """Format a prompt with the model's own chat template when available.
+
+        Llama-3 / Qwen / Mistral / Gemma all expose ``apply_chat_template``;
+        Llama-2 does too but maps it to its ``[INST]`` markers. Falling back
+        to the Llama-2 template only when no chat template is registered
+        keeps this compatible with bare base models too.
+        """
+        messages = [
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": observation_text},
+        ]
+        try:
+            return tokenizer.apply_chat_template(
+                messages, tokenize=False, add_generation_prompt=True
+            )
+        except (ValueError, AttributeError, TypeError):
+            return (
+                "[INST] <<SYS>>\n" + SYSTEM_PROMPT + "\n<</SYS>>\n\n"
+                + observation_text + " [/INST]"
+            )
+
     # Build a prompt dataset from different seeds
     prompts = []
     scenario_cache = {}
@@ -370,9 +373,9 @@ def run_grpo(
             "services": [{"name": s["name"], "error_rate_during_incident": s["error_rate_during_incident"]} for s in scenario["services"]],
             "available_commits": [{"hash": c["hash"], "service": c["service"], "message": c["message"][:60]} for c in scenario["commits"][:5]],
         }
-        prompt = _format_obs_compact(obs_dict)
+        observation_text = _format_obs_compact(obs_dict)
         prompts.append({
-            "prompt": "[INST] <<SYS>>\n" + SYSTEM_PROMPT + "\n<</SYS>>\n\n" + prompt + " [/INST]",
+            "prompt": _format_prompt(observation_text),
             "task_id": task_id,
         })
 
@@ -417,9 +420,11 @@ def run_grpo(
                     action_type=action_type,
                     service=action_dict.get("service"),
                     keyword=action_dict.get("keyword"),
+                    time_window=action_dict.get("time_window"),
                     trace_id=action_dict.get("trace_id"),
                     commit_hash=action_dict.get("commit_hash"),
                     config_id=action_dict.get("config_id"),
+                    event_id=action_dict.get("event_id"),
                     cause_entity_id=action_dict.get("cause_entity_id"),
                     chain=action_dict.get("chain"),
                     final_cause=action_dict.get("final_cause"),
@@ -432,10 +437,8 @@ def run_grpo(
                 rewards.append(0.01)
         return rewards
 
-    # Model + tokenizer
-    tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
-    if tokenizer.pad_token is None:
-        tokenizer.pad_token = tokenizer.eos_token
+    # (Tokenizer was loaded earlier so the chat template was available
+    # when constructing the prompt dataset.)
 
     lora_config = LoraConfig(
         r=8,

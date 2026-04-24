@@ -181,8 +181,12 @@ def _find_upstream_path(service_graph: Dict[str, List[str]], target: str) -> Lis
     return []
 
 def _hash_seed(seed: int, salt: str = "") -> str:
-    """Deterministic hash for generating IDs."""
-    h = hashlib.md5(f"{seed}:{salt}".encode()).hexdigest()
+    """Deterministic hash for generating IDs.
+
+    ``usedforsecurity=False`` is set so this works on FIPS-restricted
+    interpreters; the hash is only used to derive stable ID suffixes.
+    """
+    h = hashlib.md5(f"{seed}:{salt}".encode(), usedforsecurity=False).hexdigest()
     return h[:8]
 
 

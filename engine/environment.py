@@ -1,6 +1,8 @@
 """Core PostmortemEnv engine. Implements reset(), step(), and state()."""
 
-from typing import Dict, List, Optional, Any, Set
+import re
+from datetime import datetime, timedelta, timezone
+from typing import Dict, List, Optional, Any, Set, Tuple
 
 from models import (
     Service, Observation, Action, ActionType, Reward, EnvironmentState,
@@ -11,6 +13,74 @@ from engine.reward_calculator import RewardCalculator
 
 from openenv.core.env_server.interfaces import Environment
 from openenv.core.env_server.types import EnvironmentMetadata
+
+
+_TIME_WINDOW_RE = re.compile(r"^last[_\- ]?(\d+)\s*([smhd])$", re.IGNORECASE)
+_UNIT_SECONDS = {"s": 1, "m": 60, "h": 3600, "d": 86400}
+
+
+def _parse_iso(ts: str) -> Optional[datetime]:
+    """Parse an ISO-8601 timestamp; tolerate trailing ``Z``. Returns ``None`` on failure."""
+    if not ts:
+        return None
+    try:
+        return datetime.fromisoformat(ts.replace("Z", "+00:00"))
+    except (ValueError, AttributeError):
+        return None
+
+
+def _resolve_time_window(
+    spec: Optional[str],
+    incident_window: Dict[str, str],
+) -> Tuple[Optional[datetime], Optional[datetime]]:
+    """Resolve a ``time_window`` spec to a ``(start, end)`` datetime pair.
+
+    Supported specs (case-insensitive):
+
+    * ``"last_5m"``, ``"last_1h"``, ``"last_30s"``, ``"last_2d"`` —
+      ``N`` units ending at ``incident_window["end"]``.
+    * ``"during"`` / ``"incident"`` / ``"during_incident"`` — exact
+      ``[incident_start, incident_end]`` range.
+
+    Anything else (or a missing incident window) returns ``(None, None)``,
+    which means *no filtering* — the call still succeeds.
+    """
+    if not spec:
+        return None, None
+    s = spec.strip().lower()
+    incident_end = _parse_iso(incident_window.get("end", ""))
+    incident_start = _parse_iso(incident_window.get("start", ""))
+
+    if s in ("during", "incident", "during_incident") and incident_start and incident_end:
+        return incident_start, incident_end
+
+    m = _TIME_WINDOW_RE.match(s)
+    if m and incident_end:
+        n = int(m.group(1))
+        unit = m.group(2).lower()
+        delta = timedelta(seconds=n * _UNIT_SECONDS[unit])
+        return incident_end - delta, incident_end
+
+    return None, None
+
+
+def _ts_in_window(
+    ts: str,
+    start: Optional[datetime],
+    end: Optional[datetime],
+) -> bool:
+    """Whether ``ts`` falls inside ``[start, end]``. Open bounds are inclusive."""
+    if start is None and end is None:
+        return True
+    parsed = _parse_iso(ts)
+    if parsed is None:
+        # Don't drop logs we can't parse — keep them visible to the agent.
+        return True
+    if start is not None and parsed < start:
+        return False
+    if end is not None and parsed > end:
+        return False
+    return True
 
 
 class PostmortemEnvironment(Environment[Action, Observation, EnvironmentState]):
@@ -86,25 +156,42 @@ class PostmortemEnvironment(Environment[Action, Observation, EnvironmentState]):
         """
         Start a new investigation episode for the given task.
 
-        Loads the frozen outage scenario, initializes oracle state,
+        Loads the frozen outage scenario from disk, initializes oracle state,
         and returns the initial observation with the service graph and task brief.
         """
         scenario = load_scenario(task_id)
+        return self.reset_from_scenario(scenario, task_id=task_id)
 
-        self._task_id = task_id
+    def reset_from_scenario(
+        self,
+        scenario: Dict[str, Any],
+        task_id: Optional[str] = None,
+    ) -> Observation:
+        """
+        Reset the environment with an externally-supplied scenario dict.
+
+        Same shape contract as scenarios produced by
+        :func:`data.seed_generator.generate_scenario` and
+        :func:`data.generator.load_scenario`. Use this for procedural seeds,
+        GRPO rollouts, and curriculum tooling that need to inject a scenario
+        without going through the disk-based ``load_scenario()`` lookup.
+
+        ``task_id`` defaults to ``scenario["task_id"]`` when not supplied.
+        """
+        self._task_id = task_id or scenario["task_id"]
         self._difficulty = scenario["task_difficulty"]
-        self._task_description = scenario["task_description"]
-        self._max_steps = scenario["max_steps"]
+        self._task_description = scenario.get("task_description", "Investigate the outage.")
+        self._max_steps = scenario.get("max_steps", 40)
 
         # Load the telemetry haystack
-        self._service_graph = scenario["service_graph"]
-        self._services = scenario["services"]
-        self._incident_window = scenario["incident_window"]
-        self._logs = scenario["logs"]
-        self._traces = scenario["traces"]
-        self._commits = scenario["commits"]
-        self._config_changes = scenario["config_changes"]
-        self._infra_events = scenario["infra_events"]
+        self._service_graph = scenario.get("service_graph", {})
+        self._services = scenario.get("services", [])
+        self._incident_window = scenario.get("incident_window", {})
+        self._logs = scenario.get("logs", {})
+        self._traces = scenario.get("traces", [])
+        self._commits = scenario.get("commits", [])
+        self._config_changes = scenario.get("config_changes", [])
+        self._infra_events = scenario.get("infra_events", [])
 
         # Oracle ground truth
         gt = scenario["ground_truth"]
@@ -145,6 +232,7 @@ class PostmortemEnvironment(Environment[Action, Observation, EnvironmentState]):
             ActionType.FETCH_TRACE: self._handle_fetch_trace,
             ActionType.DIFF_COMMIT: self._handle_diff_commit,
             ActionType.INSPECT_CONFIG: self._handle_inspect_config,
+            ActionType.INSPECT_INFRA: self._handle_inspect_infra,
             ActionType.HYPOTHESIZE: self._handle_hypothesize,
             ActionType.EXPLAIN_CHAIN: self._handle_explain_chain,
             ActionType.SUBMIT: self._handle_submit,
@@ -221,7 +309,13 @@ class PostmortemEnvironment(Environment[Action, Observation, EnvironmentState]):
     # --- action handlers ---
 
     def _handle_query_logs(self, action: Action) -> Reward:
-        """Search logs by service and keyword. Returns matching log lines."""
+        """Search logs by service and keyword. Returns matching log lines.
+
+        Optional ``action.time_window`` (e.g. ``"last_5m"``, ``"last_1h"``,
+        ``"during_incident"``) restricts results to a window anchored on the
+        scenario's ``incident_window``. Unparseable specs degrade to no
+        filtering rather than raising — keyword-only queries continue to work.
+        """
         service = action.service
         keyword = action.keyword or ""
 
@@ -238,15 +332,21 @@ class PostmortemEnvironment(Environment[Action, Observation, EnvironmentState]):
 
         service_logs = self._logs[service]
 
-        # Filter by keyword (case-insensitive)
-        if keyword:
-            matching = [
-                log for log in service_logs
-                if keyword.lower() in log.get("message", "").lower()
-                or keyword.lower() in log.get("level", "").lower()
-            ]
-        else:
-            matching = service_logs
+        window_start, window_end = _resolve_time_window(
+            action.time_window, self._incident_window
+        )
+
+        kw_lower = keyword.lower()
+
+        def _matches(log: dict) -> bool:
+            if kw_lower and not (
+                kw_lower in log.get("message", "").lower()
+                or kw_lower in log.get("level", "").lower()
+            ):
+                return False
+            return _ts_in_window(log.get("timestamp", ""), window_start, window_end)
+
+        matching = [log for log in service_logs if _matches(log)]
 
         # Cap at 20 results
         matching = matching[:20]
@@ -262,15 +362,24 @@ class PostmortemEnvironment(Environment[Action, Observation, EnvironmentState]):
                 self._known_facts.append(fact_desc)
 
         # Format result
+        window_note = (
+            f" window: '{action.time_window}'" if action.time_window else ""
+        )
         if matching:
             lines = []
             for log in matching:
                 lines.append(
                     f"[{log.get('timestamp', '')}] {log.get('level', 'INFO')}: {log.get('message', '')}"
                 )
-            self._last_query_result = f"=== Logs for {service} (keyword: '{keyword}') ===\n" + "\n".join(lines)
+            self._last_query_result = (
+                f"=== Logs for {service} (keyword: '{keyword}'{window_note}) ===\n"
+                + "\n".join(lines)
+            )
         else:
-            self._last_query_result = f"No log entries found for service '{service}' matching keyword '{keyword}'."
+            self._last_query_result = (
+                f"No log entries found for service '{service}' "
+                f"matching keyword '{keyword}'{window_note}."
+            )
 
         return RewardCalculator.query_reward(new_relevant)
 
@@ -405,6 +514,52 @@ class PostmortemEnvironment(Environment[Action, Observation, EnvironmentState]):
             f"Old Value: {config.get('old_value', '?')}",
             f"New Value: {config.get('new_value', '?')}",
             f"Description: {config.get('description', '')}",
+        ]
+        self._last_query_result = "\n".join(lines)
+
+        return RewardCalculator.query_reward(new_relevant)
+
+    def _handle_inspect_infra(self, action: Action) -> Reward:
+        """Inspect a specific infrastructure event by ID.
+
+        Infrastructure events (DNS updates, AZ failovers, certificate
+        rotations, etc.) appear in the observation but were previously
+        unreachable — there was no action to drill into them. With this
+        handler, an event whose underlying detail is a relevant fact
+        contributes to the info-gain reward exactly like log/trace/commit
+        discovery.
+        """
+        event_id = action.event_id
+        if not event_id:
+            return RewardCalculator.invalid_action_reward(
+                "inspect_infra requires an 'event_id' parameter."
+            )
+
+        event = next(
+            (e for e in self._infra_events if e.get("event_id") == event_id),
+            None,
+        )
+        if event is None:
+            available = [e.get("event_id", "") for e in self._infra_events[:10]]
+            return RewardCalculator.invalid_action_reward(
+                f"Infra event '{event_id}' not found. Available: {available}"
+            )
+
+        new_relevant = 0
+        if event.get("relevant", False) and event_id not in self._facts_discovered:
+            self._facts_discovered.add(event_id)
+            new_relevant += 1
+            fact_desc = (
+                f"Infra event {event_id} ({event.get('type', '?')}): "
+                f"{event.get('description', '')[:120]}"
+            )
+            self._known_facts.append(fact_desc)
+
+        lines = [
+            f"=== Infrastructure Event: {event_id} ===",
+            f"Type: {event.get('type', '?')}",
+            f"Timestamp: {event.get('timestamp', '?')}",
+            f"Description: {event.get('description', '')}",
         ]
         self._last_query_result = "\n".join(lines)
 

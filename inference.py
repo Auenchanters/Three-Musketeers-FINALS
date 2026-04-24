@@ -37,16 +37,25 @@ def _error(msg: str):
 
 API_BASE_URL = os.environ.get("API_BASE_URL", "https://router.huggingface.co/v1")
 HF_TOKEN = os.getenv("HF_TOKEN") or None
-if not HF_TOKEN:
-    _error(
-        "HF_TOKEN is not set. Export HF_TOKEN=<your-hf-token> to run the LLM "
-        "agent against the HF Inference Router. To verify the environment "
-        "without any key, run `python test_oracle_e2e.py`, or open the live UI "
-        "(`uvicorn app:app --port 7860`) and pick Oracle or Random."
-    )
-    sys.exit(2)
 MODEL_NAME = os.environ.get("MODEL_NAME", "meta-llama/Meta-Llama-3-8B-Instruct")
 ENV_URL = os.environ.get("ENV_URL", "http://localhost:7860")
+
+
+def _require_hf_token() -> str:
+    """Enforce ``HF_TOKEN`` only at run time so this module stays importable.
+
+    Other scripts (e.g. ``scripts/run_frontier_benchmark.py``) reuse the
+    prompt and parser helpers without needing the HF Inference Router.
+    """
+    if not HF_TOKEN:
+        _error(
+            "HF_TOKEN is not set. Export HF_TOKEN=<your-hf-token> to run the LLM "
+            "agent against the HF Inference Router. To verify the environment "
+            "without any key, run `python test_oracle_e2e.py`, or open the live UI "
+            "(`uvicorn app:app --port 7860`) and pick Oracle or Random."
+        )
+        sys.exit(2)
+    return HF_TOKEN
 
 
 MAX_STEPS = 50
@@ -62,10 +71,11 @@ IMPORTANT: You MUST respond with ONLY a single JSON object. No explanation, no r
 You are investigating a FROZEN outage — it already happened. Your job is to find the root cause and the causal chain of how the failure propagated.
 
 Available actions:
-- query_logs(service, keyword): Search logs for a specific service by keyword
+- query_logs(service, keyword, time_window?): Search logs for a service by keyword. Optional time_window like "last_5m" or "during_incident" filters by time.
 - fetch_trace(trace_id): Get a specific distributed trace
 - diff_commit(commit_hash): See what changed in a specific commit
 - inspect_config(config_id): See a specific config change
+- inspect_infra(event_id): See details of an infrastructure event (DNS update, AZ failover, etc.)
 - hypothesize(cause_entity_id): Test if a candidate is the root cause (non-terminal, gives feedback)
 - explain_chain(chain): Test if your causal chain is correct (non-terminal, gives feedback)
 - submit(final_cause, final_chain): Submit your final answer and end the investigation
@@ -88,9 +98,11 @@ RULES:
 
 RESPOND WITH ONLY JSON. Examples:
 {"action_type": "query_logs", "service": "data", "keyword": "error"}
+{"action_type": "query_logs", "service": "data", "keyword": "timeout", "time_window": "last_5m"}
 {"action_type": "diff_commit", "commit_hash": "commit-abc123"}
 {"action_type": "fetch_trace", "trace_id": "trace-001"}
 {"action_type": "inspect_config", "config_id": "cfg-001"}
+{"action_type": "inspect_infra", "event_id": "infra-001"}
 {"action_type": "hypothesize", "cause_entity_id": "commit-abc123"}
 {"action_type": "explain_chain", "chain": [{"service": "data", "effect": "connection_pool_exhaustion"}, {"service": "auth", "effect": "upstream_timeout"}]}
 {"action_type": "submit", "final_cause": "commit-abc123", "final_chain": [{"service": "data", "effect": "pool_exhaustion"}, {"service": "auth", "effect": "timeout"}, {"service": "frontend", "effect": "5xx_errors"}]}
@@ -433,7 +445,8 @@ def run_task(llm_client: OpenAI, env_url: str, task_name: str) -> float:
 
 def main():
     """Run all tasks and report scores."""
-    llm_client = OpenAI(base_url=API_BASE_URL, api_key=HF_TOKEN)
+    token = _require_hf_token()
+    llm_client = OpenAI(base_url=API_BASE_URL, api_key=token)
 
     # Health check
     try:

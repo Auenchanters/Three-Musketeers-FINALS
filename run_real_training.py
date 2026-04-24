@@ -60,7 +60,7 @@ print()
 SYSTEM_PROMPT = (
     "You are an SRE investigator. Respond with ONLY a JSON object for "
     "your next action. Actions: query_logs, fetch_trace, diff_commit, "
-    "inspect_config, hypothesize, explain_chain, submit."
+    "inspect_config, inspect_infra, hypothesize, explain_chain, submit."
 )
 
 
@@ -104,65 +104,78 @@ def _parse_action(text: str) -> dict:
 
 
 def _reset_with_scenario(env, scenario):
-    """Reset env with a procedurally generated scenario (mirrors env.reset())."""
-    env._task_id = scenario["task_id"]
-    env._difficulty = scenario["task_difficulty"]
-    env._task_description = scenario.get("task_description", "Investigate the outage.")
-    env._max_steps = scenario.get("max_steps", 40)
+    """Reset env with a procedurally generated scenario.
 
-    # Telemetry haystack
-    env._service_graph = scenario["service_graph"]
-    env._services = scenario.get("services", [])
-    env._incident_window = scenario.get("incident_window", {})
-    env._logs = scenario.get("logs", {})
-    env._traces = scenario.get("traces", [])
-    env._commits = scenario.get("commits", [])
-    env._config_changes = scenario.get("config_changes", [])
-    env._infra_events = scenario.get("infra_events", [])
-
-    # Oracle ground truth
-    gt = scenario["ground_truth"]
-    env._ground_truth_cause = gt["cause"]
-    env._ground_truth_cause_type = gt.get("cause_type", "commit")
-    env._ground_truth_chain = gt["chain"]
-    env._contributing_causes = gt.get("contributing_causes", [])
-    env._relevant_fact_ids = set(scenario.get("relevant_fact_ids", []))
-
-    # Reset episode tracking — must match types in __init__
-    env._facts_discovered = set()
-    env._known_facts = []
-    env._hypotheses_submitted = []  # List[dict], NOT int
-    env._wrong_hypotheses = 0
-    env._steps_taken = 0
-    env._done = False
-    env._message = f"Investigation started. {env._task_description}"
-    env._last_query_result = ""
-    env._final_score = None
-
-    env._initialized = True
-    return env._build_observation(reward=0.01, done=False)
+    Thin compatibility shim — delegates to the public
+    :meth:`PostmortemEnvironment.reset_from_scenario` method. Kept under
+    the old private name so the existing eval loop reads identically.
+    """
+    return env.reset_from_scenario(scenario)
 
 
 # ── Step 1: Prepare SFT dataset from oracle demos ───────────────────────────
 
 def prepare_dataset(demos_path: str) -> Dataset:
-    """Convert oracle demos JSONL to chat-formatted dataset for SFT."""
+    """Convert oracle demos JSONL to chat-formatted dataset for SFT.
+
+    Each line is an oracle episode of the shape
+    ``{"task_id", "difficulty", "conversation": [...], "final_score", "n_steps"}``
+    where ``conversation`` alternates ``{"role": "user", "content": <obs text>}``
+    and ``{"role": "assistant", "content": <action JSON>}``. We expand every
+    matched user/assistant turn into a single instruction/response training
+    example so the model sees one decision per row.
+    """
     print("Preparing SFT dataset from oracle demonstrations...")
 
     texts = []
+    n_episodes = 0
+    n_skipped_lines = 0
     with open(demos_path) as f:
         for line in f:
-            demo = json.loads(line)
-            # Each demo has observation/action pairs — format as instruction/response
-            obs_text = _format_obs(demo.get("observation", {}))
-            action = demo.get("action", {})
-            action_json = json.dumps(action, separators=(",", ":"))
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                demo = json.loads(line)
+            except json.JSONDecodeError:
+                n_skipped_lines += 1
+                continue
 
-            text = f"### Instruction:\n{SYSTEM_PROMPT}\n\n{obs_text}\n\n### Response:\n{action_json}"
-            texts.append({"text": text})
+            conv = demo.get("conversation") or []
+            if not conv:
+                n_skipped_lines += 1
+                continue
+            n_episodes += 1
+
+            i = 0
+            while i < len(conv) - 1:
+                turn = conv[i]
+                nxt = conv[i + 1]
+                if turn.get("role") == "user" and nxt.get("role") == "assistant":
+                    user_text = (turn.get("content") or "").strip()
+                    action_text = (nxt.get("content") or "").strip()
+                    if user_text and action_text:
+                        text = (
+                            f"### Instruction:\n{SYSTEM_PROMPT}\n\n"
+                            f"{user_text}\n\n"
+                            f"### Response:\n{action_text}"
+                        )
+                        texts.append({"text": text})
+                    i += 2
+                else:
+                    i += 1
+
+    if not texts:
+        raise RuntimeError(
+            f"No training examples extracted from {demos_path}. "
+            "Expected JSONL with `conversation` field of role/content turns."
+        )
 
     ds = Dataset.from_list(texts)
-    print(f"  Dataset: {len(ds)} examples")
+    print(
+        f"  Dataset: {len(ds)} examples from {n_episodes} oracle episodes"
+        f"{f' ({n_skipped_lines} bad lines skipped)' if n_skipped_lines else ''}"
+    )
     return ds
 
 
