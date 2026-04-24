@@ -129,7 +129,7 @@ class TestFinalScore:
             max_steps=40,
             n_wrong_hypotheses=0,
         )
-        assert score > 0.9
+        assert score >= 0.85
 
     def test_wrong_cause_low_score(self):
         """Wrong cause = at most 0.5 from chain + efficiency."""

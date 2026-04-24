@@ -1,17 +1,31 @@
-"""Deterministic oracle grading formula for PostmortemEnv."""
+"""Deterministic oracle grading formula for PostmortemEnv.
 
-from typing import List, Dict, Optional
+Terminal scoring is now driven by the formal :class:`RubricSet` defined
+in :mod:`engine.rubrics`.  The five composable rubrics are:
+
+1. **Cause correctness** (40 %) — did the agent name the right root cause?
+2. **Chain accuracy** (25 %) — Jaccard node+edge similarity of the chain.
+3. **Efficiency** (15 %) — how quickly the agent solved relative to budget.
+4. **Investigation quality** (10 %) — fact coverage × action diversity.
+5. **Anti-gaming** (10 %) — penalises brute-force guess patterns.
+
+All scores are clamped to (0.01, 0.99) for OpenEnv validator compliance.
+"""
+
+from typing import Any, Dict, List, Optional
+
+from engine.rubrics import POSTMORTEM_RUBRICS
 
 
 def _compute_graph_similarity(predicted: List[Dict[str, str]], actual: List[Dict[str, str]]) -> float:
-    """
-    Compute structural graph similarity between two causal chains.
+    """Compute structural graph similarity between two causal chains.
 
-    Each chain is interpreted as a sequence of nodes: [A -> B -> C].
-    We compute the Jaccard similarity of both the individual nodes (service, effect)
-    and the directed edges between them.
+    Each chain is interpreted as a sequence of directed nodes:
+    ``[A → B → C]``.  Similarity combines:
+    • **Node Jaccard** (weight 0.4) — overlap of ``(service, effect)`` tuples.
+    • **Edge Jaccard** (weight 0.6) — overlap of directed bigrams.
 
-    Returns a value in [0.0, 1.0] where 1.0 = identical, 0.0 = completely different.
+    Returns a value in ``[0.0, 1.0]``; ``1.0`` = identical.
     """
     if not actual:
         return 1.0 if not predicted else 0.0
@@ -21,14 +35,14 @@ def _compute_graph_similarity(predicted: List[Dict[str, str]], actual: List[Dict
     # Extract nodes
     pred_nodes = set((s.get("service", ""), s.get("effect", "")) for s in predicted)
     act_nodes = set((s.get("service", ""), s.get("effect", "")) for s in actual)
-    
+
     # Extract edges (bigrams)
     pred_edges = set()
     for i in range(len(predicted) - 1):
         n1 = (predicted[i].get("service", ""), predicted[i].get("effect", ""))
         n2 = (predicted[i+1].get("service", ""), predicted[i+1].get("effect", ""))
         pred_edges.add((n1, n2))
-        
+
     act_edges = set()
     for i in range(len(actual) - 1):
         n1 = (actual[i].get("service", ""), actual[i].get("effect", ""))
@@ -39,32 +53,24 @@ def _compute_graph_similarity(predicted: List[Dict[str, str]], actual: List[Dict
     nodes_intersection = len(pred_nodes.intersection(act_nodes))
     nodes_union = len(pred_nodes.union(act_nodes))
     node_sim = nodes_intersection / nodes_union if nodes_union > 0 else 0.0
-    
+
     # Compute edge Jaccard similarity (weight: 0.6)
     edges_intersection = len(pred_edges.intersection(act_edges))
     edges_union = len(pred_edges.union(act_edges))
     edge_sim = edges_intersection / edges_union if edges_union > 0 else 1.0 if not act_edges and not pred_edges else 0.0
-    
+
     return 0.4 * node_sim + 0.6 * edge_sim
 
 
 class Grader:
-    """
-    Deterministic oracle grader for PostmortemEnv.
+    """Deterministic oracle grader for PostmortemEnv.
 
-    Scoring formula (from Foundation Doc §5.4):
-        r_terminal = 0.5 * is_correct_cause
-                   + 0.3 * chain_similarity
-                   + 0.2 * efficiency_bonus
-                   - 0.1 * n_wrong_hypotheses
+    Uses the composable rubric system defined in ``engine.rubrics``.
+    The five rubrics are independently scored and then aggregated:
 
-    Where:
-        - is_correct_cause: 1 if submitted cause matches ground truth, else 0
-        - chain_similarity: compute_graph_similarity(predicted, actual)
-        - efficiency_bonus: max(0, 1 - steps_used / max_steps)
-        - n_wrong_hypotheses: count of incorrect hypothesize calls
+    ``r_terminal = Σ (rubric_weight × rubric_score)``
 
-    All scores clamped to (0.01, 0.99) for validator compliance.
+    All scores clamped to ``(0.01, 0.99)`` for validator compliance.
     """
 
     @staticmethod
@@ -74,12 +80,12 @@ class Grader:
         cause_type: str = "commit",
         contributing_causes: Optional[List[str]] = None,
     ) -> bool:
-        """
-        Check if the submitted cause matches the ground truth.
+        """Check if the submitted cause matches the ground truth.
 
-        For correlated causes (cause_type == 'correlated'), accepts:
-        - Exact match on the combined cause ID (e.g. 'commit-abc+infra-xyz')
-        - Any of the contributing causes individually (partial credit handled in scoring)
+        For correlated causes (``cause_type == 'correlated'``), accepts:
+        - Exact match on the combined cause ID (e.g. ``'commit-abc+infra-xyz'``)
+        - Any of the contributing causes individually (partial credit
+          is handled in scoring via the ``partial_credit`` kwarg)
         """
         if not submitted_cause or not ground_truth_cause:
             return False
@@ -104,10 +110,9 @@ class Grader:
         predicted_chain: Optional[List[Dict[str, str]]],
         actual_chain: List[Dict[str, str]],
     ) -> float:
-        """
-        Compute similarity between predicted and actual causal chains.
+        """Compute similarity between predicted and actual causal chains.
 
-        Returns value in [0.0, 1.0] where 1.0 = perfect match.
+        Returns value in ``[0.0, 1.0]`` where ``1.0`` = perfect match.
         """
         if predicted_chain is None:
             return 0.0
@@ -126,54 +131,73 @@ class Grader:
         max_steps: int,
         n_wrong_hypotheses: int,
         contributing_causes: Optional[List[str]] = None,
+        facts_found: int = 0,
+        total_facts: int = 1,
+        action_types_used: int = 0,
+        repeated_queries: int = 0,
+        hypothesis_attempts: int = 0,
     ) -> float:
-        """
-        Compute the final episode score.
+        """Compute the final episode score using the composable rubric system.
 
-        Args:
-            submitted_cause: The agent's submitted root cause entity ID.
-            submitted_chain: The agent's submitted causal chain.
-            ground_truth_cause: The true root cause entity ID.
-            ground_truth_chain: The true causal chain.
-            cause_type: Type of cause ('commit', 'config', 'infra', 'correlated').
-            steps_used: Number of steps the agent took.
-            max_steps: Maximum steps allowed for this task.
-            n_wrong_hypotheses: Count of incorrect hypothesize calls.
-            contributing_causes: For correlated causes, list of contributing cause IDs.
+        Parameters
+        ----------
+        submitted_cause, submitted_chain
+            The agent's final answer.
+        ground_truth_cause, ground_truth_chain
+            The oracle answer.
+        cause_type
+            ``'commit'``, ``'config'``, ``'infra'``, or ``'correlated'``.
+        steps_used, max_steps
+            Efficiency inputs.
+        n_wrong_hypotheses
+            Count of incorrect ``hypothesize`` calls.
+        contributing_causes
+            For correlated causes, list of constituent cause IDs.
+        facts_found, total_facts
+            Investigation quality inputs.
+        action_types_used
+            Number of distinct action types the agent used.
+        repeated_queries
+            Number of exact-duplicate queries the agent issued.
+        hypothesis_attempts
+            Total number of ``hypothesize`` calls (correct + incorrect).
 
-        Returns:
-            Score clamped to (0.01, 0.99).
+        Returns
+        -------
+        float
+            Score clamped to ``(0.01, 0.99)``.
         """
-        # Component 1: Cause correctness (0.5 weight)
+        # --- Cause correctness ---
         is_correct = Grader.check_cause_match(
             submitted_cause, ground_truth_cause, cause_type, contributing_causes
         )
-        cause_score = 1.0 if is_correct else 0.0
-
-        # For correlated causes, partial credit if only one contributing cause identified
+        partial_credit = 0.0
         if cause_type == "correlated" and not is_correct and contributing_causes:
             submitted_lower = (submitted_cause or "").strip().lower()
             for cc in contributing_causes:
                 if submitted_lower == cc.strip().lower():
-                    cause_score = 0.5  # partial credit
+                    partial_credit = 0.5
                     break
 
-        # Component 2: Chain similarity (0.3 weight)
+        # --- Chain similarity ---
         chain_sim = Grader.compute_chain_similarity(submitted_chain, ground_truth_chain)
 
-        # Component 3: Efficiency bonus (0.2 weight)
-        if max_steps > 0:
-            efficiency = max(0.0, 1.0 - steps_used / max_steps)
-        else:
-            efficiency = 0.0
-
-        # Combine
-        raw_score = (
-            0.5 * cause_score
-            + 0.3 * chain_sim
-            + 0.2 * efficiency
-            - 0.1 * n_wrong_hypotheses
+        # --- Evaluate via rubric system ---
+        result = POSTMORTEM_RUBRICS.evaluate(
+            cause_match=is_correct,
+            partial_credit=partial_credit,
+            chain_similarity=chain_sim,
+            steps_used=steps_used,
+            max_steps=max_steps,
+            facts_found=facts_found,
+            total_facts=total_facts,
+            action_types_used=action_types_used,
+            wrong_hypotheses=n_wrong_hypotheses,
+            repeated_queries=repeated_queries,
+            hypothesis_attempts=hypothesis_attempts,
         )
+
+        raw_score = result["total"]
 
         # Clamp to (0.01, 0.99) for validator compliance
         try:
@@ -183,3 +207,69 @@ class Grader:
             return round(min(max(val, 0.01), 0.99), 4)
         except (ValueError, TypeError):
             return 0.01
+
+    @staticmethod
+    def compute_final_score_with_breakdown(
+        submitted_cause: str,
+        submitted_chain: Optional[List[Dict[str, str]]],
+        ground_truth_cause: str,
+        ground_truth_chain: List[Dict[str, str]],
+        cause_type: str,
+        steps_used: int,
+        max_steps: int,
+        n_wrong_hypotheses: int,
+        contributing_causes: Optional[List[str]] = None,
+        facts_found: int = 0,
+        total_facts: int = 1,
+        action_types_used: int = 0,
+        repeated_queries: int = 0,
+        hypothesis_attempts: int = 0,
+    ) -> Dict[str, Any]:
+        """Same as ``compute_final_score`` but returns the full rubric breakdown.
+
+        Returns
+        -------
+        dict
+            ``{"score": float, "rubrics": [...]}``
+        """
+        # --- Cause correctness ---
+        is_correct = Grader.check_cause_match(
+            submitted_cause, ground_truth_cause, cause_type, contributing_causes
+        )
+        partial_credit = 0.0
+        if cause_type == "correlated" and not is_correct and contributing_causes:
+            submitted_lower = (submitted_cause or "").strip().lower()
+            for cc in contributing_causes:
+                if submitted_lower == cc.strip().lower():
+                    partial_credit = 0.5
+                    break
+
+        chain_sim = Grader.compute_chain_similarity(submitted_chain, ground_truth_chain)
+
+        result = POSTMORTEM_RUBRICS.evaluate(
+            cause_match=is_correct,
+            partial_credit=partial_credit,
+            chain_similarity=chain_sim,
+            steps_used=steps_used,
+            max_steps=max_steps,
+            facts_found=facts_found,
+            total_facts=total_facts,
+            action_types_used=action_types_used,
+            wrong_hypotheses=n_wrong_hypotheses,
+            repeated_queries=repeated_queries,
+            hypothesis_attempts=hypothesis_attempts,
+        )
+
+        raw_score = result["total"]
+        try:
+            val = float(raw_score)
+            if val != val:
+                val = 0.01
+            clamped = round(min(max(val, 0.01), 0.99), 4)
+        except (ValueError, TypeError):
+            clamped = 0.01
+
+        return {
+            "score": clamped,
+            "rubrics": result["breakdown"],
+        }

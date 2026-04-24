@@ -132,6 +132,12 @@ class PostmortemEnvironment(Environment[Action, Observation, EnvironmentState]):
         self._last_query_result: str = ""
         self._final_score: Optional[float] = None
 
+        # Anti-gaming tracking
+        self._query_history: List[Tuple[str, str]] = []   # (service, keyword)
+        self._last_queried_service: Optional[str] = None  # for coherence bonus
+        self._action_types_used: Set[str] = set()         # for diversity bonus
+        self._repeated_query_count: int = 0               # total repeats
+
         self._initialized: bool = False
 
     # --- metadata ---
@@ -212,6 +218,12 @@ class PostmortemEnvironment(Environment[Action, Observation, EnvironmentState]):
         self._last_query_result = ""
         self._final_score = None
 
+        # Reset anti-gaming tracking
+        self._query_history = []
+        self._last_queried_service = None
+        self._action_types_used = set()
+        self._repeated_query_count = 0
+
         self._initialized = True
         return self._build_observation(reward=0.01, done=False)
 
@@ -225,6 +237,9 @@ class PostmortemEnvironment(Environment[Action, Observation, EnvironmentState]):
             raise RuntimeError("Episode is done. Call reset() to start a new episode.")
 
         self._steps_taken += 1
+
+        # Track action type diversity
+        self._action_types_used.add(action.action_type.value)
 
         # Dispatch to handler
         handler = {
@@ -245,6 +260,13 @@ class PostmortemEnvironment(Environment[Action, Observation, EnvironmentState]):
         else:
             reward = handler(action)
 
+        # Add action diversity bonus to non-terminal steps
+        diversity_bonus = 0.0
+        if not self._done:
+            diversity_bonus = RewardCalculator.diversity_reward(
+                len(self._action_types_used)
+            )
+
         self._message = reward.message
 
         # Check if max steps reached
@@ -262,6 +284,11 @@ class PostmortemEnvironment(Environment[Action, Observation, EnvironmentState]):
                     max_steps=self._max_steps,
                     n_wrong_hypotheses=self._wrong_hypotheses,
                     contributing_causes=self._contributing_causes,
+                    facts_found=len(self._facts_discovered),
+                    total_facts=len(self._relevant_fact_ids),
+                    action_types_used=len(self._action_types_used),
+                    repeated_queries=self._repeated_query_count,
+                    hypothesis_attempts=len(self._hypotheses_submitted),
                 )
             self._message += " | Query budget exhausted. Episode ended."
 
@@ -269,7 +296,7 @@ class PostmortemEnvironment(Environment[Action, Observation, EnvironmentState]):
         if self._done and self._final_score is not None:
             raw_reward = self._final_score
         else:
-            raw_reward = reward.value
+            raw_reward = reward.value + diversity_bonus
 
         # Clamp to (0.01, 0.99)
         clamped = round(min(max(float(raw_reward), 0.01), 0.99), 4)
@@ -279,6 +306,8 @@ class PostmortemEnvironment(Environment[Action, Observation, EnvironmentState]):
             "steps_taken": self._steps_taken,
             "facts_discovered": len(self._facts_discovered),
             "wrong_hypotheses": self._wrong_hypotheses,
+            "action_types_used": len(self._action_types_used),
+            "repeated_queries": self._repeated_query_count,
         }
         return obs
 
@@ -329,6 +358,23 @@ class PostmortemEnvironment(Environment[Action, Observation, EnvironmentState]):
             return RewardCalculator.invalid_action_reward(
                 f"Unknown service '{service}'. Available: {available}"
             )
+
+        # --- Anti-gaming: track repeated queries ---
+        query_key = (service, keyword.lower())
+        repeat_count = self._query_history.count(query_key)
+        self._query_history.append(query_key)
+        if repeat_count > 0:
+            self._repeated_query_count += 1
+
+        # --- Coherence: is this service a graph-neighbour of the last? ---
+        coherence_hit = False
+        if self._last_queried_service and self._last_queried_service != service:
+            neighbours = set(self._service_graph.get(self._last_queried_service, []))
+            upstream_of = {s for s, deps in self._service_graph.items()
+                          if self._last_queried_service in deps}
+            if service in neighbours or service in upstream_of:
+                coherence_hit = True
+        self._last_queried_service = service
 
         service_logs = self._logs[service]
 
@@ -381,7 +427,11 @@ class PostmortemEnvironment(Environment[Action, Observation, EnvironmentState]):
                 f"matching keyword '{keyword}'{window_note}."
             )
 
-        return RewardCalculator.query_reward(new_relevant)
+        return RewardCalculator.query_reward(
+            new_relevant,
+            repeat_count=repeat_count,
+            coherence_hit=coherence_hit,
+        )
 
     def _handle_fetch_trace(self, action: Action) -> Reward:
         """Fetch a specific distributed trace by ID."""
@@ -566,12 +616,27 @@ class PostmortemEnvironment(Environment[Action, Observation, EnvironmentState]):
         return RewardCalculator.query_reward(new_relevant)
 
     def _handle_hypothesize(self, action: Action) -> Reward:
-        """Submit a candidate root cause for feedback (non-terminal)."""
+        """Submit a candidate root cause for feedback (non-terminal).
+
+        Anti-gaming: capped at 3 hypothesis attempts per episode.
+        Beyond the cap, the agent receives a fixed penalty and is told
+        to investigate more before guessing.
+        """
+        MAX_HYPOTHESES = 3
+
         cause_id = action.cause_entity_id
         if not cause_id:
             return RewardCalculator.invalid_action_reward(
                 "hypothesize requires a 'cause_entity_id' parameter."
             )
+
+        # --- Anti-gaming: enforce hypothesis cap ---
+        if len(self._hypotheses_submitted) >= MAX_HYPOTHESES:
+            self._last_query_result = (
+                f"Hypothesis limit reached ({MAX_HYPOTHESES} max per episode). "
+                "You must investigate more before guessing."
+            )
+            return RewardCalculator.hypothesis_limit_reward()
 
         is_correct = Grader.check_cause_match(
             cause_id,
@@ -594,7 +659,12 @@ class PostmortemEnvironment(Environment[Action, Observation, EnvironmentState]):
             return RewardCalculator.hypothesis_wrong_reward()
 
     def _handle_explain_chain(self, action: Action) -> Reward:
-        """Submit a causal chain hypothesis for feedback (non-terminal)."""
+        """Submit a causal chain hypothesis for qualitative feedback (non-terminal).
+
+        Anti-gaming: the response gives only a qualitative band ("very close",
+        "partially matches", etc.) — NOT the exact numeric similarity or the
+        ground truth chain length.  This prevents hill-climbing exploits.
+        """
         chain = action.chain
         if not chain:
             return RewardCalculator.invalid_action_reward(
@@ -603,23 +673,32 @@ class PostmortemEnvironment(Environment[Action, Observation, EnvironmentState]):
 
         similarity = Grader.compute_chain_similarity(chain, self._ground_truth_chain)
 
+        # Qualitative feedback only — no numeric similarity, no GT chain length
+        if similarity >= 0.8:
+            feedback = "Your causal chain is very close to the actual chain. Strong reasoning."
+        elif similarity >= 0.5:
+            feedback = "Your chain partially matches. Some steps are correct, others need revision."
+        elif similarity >= 0.2:
+            feedback = "Your chain has some relevant elements but the overall structure is off."
+        else:
+            feedback = "Your chain does not match well. Re-examine the evidence and revise."
+
         self._last_query_result = (
-            f"Chain similarity: {similarity:.2f}\n"
-            f"Your chain has {len(chain)} steps. "
-            f"Ground truth has {len(self._ground_truth_chain)} steps."
+            f"Chain evaluation: {feedback}\n"
+            f"Your chain has {len(chain)} steps."
         )
 
         return RewardCalculator.chain_feedback_reward(similarity)
 
     def _handle_submit(self, action: Action) -> Reward:
-        """Terminal action — submit final cause and chain for grading."""
+        """Terminal action — submit final cause and chain for rubric-based grading."""
         final_cause = action.final_cause or ""
         final_chain = action.final_chain
 
         self._done = True
 
-        # Compute final score
-        self._final_score = Grader.compute_final_score(
+        # Compute final score via composable rubric system
+        result = Grader.compute_final_score_with_breakdown(
             submitted_cause=final_cause,
             submitted_chain=final_chain,
             ground_truth_cause=self._ground_truth_cause,
@@ -629,7 +708,21 @@ class PostmortemEnvironment(Environment[Action, Observation, EnvironmentState]):
             max_steps=self._max_steps,
             n_wrong_hypotheses=self._wrong_hypotheses,
             contributing_causes=self._contributing_causes,
+            facts_found=len(self._facts_discovered),
+            total_facts=len(self._relevant_fact_ids),
+            action_types_used=len(self._action_types_used),
+            repeated_queries=self._repeated_query_count,
+            hypothesis_attempts=len(self._hypotheses_submitted),
         )
+
+        self._final_score = result["score"]
+
+        # Build human-readable rubric breakdown
+        rubric_lines = []
+        for r in result["rubrics"]:
+            rubric_lines.append(
+                f"  {r['rubric']}: {r['raw_score']:.2f} × {r['weight']:.2f} = {r['weighted_score']:.3f}"
+            )
 
         self._last_query_result = (
             f"=== INVESTIGATION COMPLETE ===\n"
@@ -637,13 +730,19 @@ class PostmortemEnvironment(Environment[Action, Observation, EnvironmentState]):
             f"Submitted chain: {final_chain}\n"
             f"Ground truth cause: {self._ground_truth_cause}\n"
             f"Ground truth chain: {self._ground_truth_chain}\n"
-            f"Final score: {self._final_score:.4f}\n"
+            f"\n--- Rubric Breakdown ---\n"
+            + "\n".join(rubric_lines) +
+            f"\n\nFinal score: {self._final_score:.4f}\n"
             f"Steps used: {self._steps_taken}/{self._max_steps}\n"
             f"Wrong hypotheses: {self._wrong_hypotheses}\n"
-            f"Facts discovered: {len(self._facts_discovered)}/{len(self._relevant_fact_ids)}"
+            f"Facts discovered: {len(self._facts_discovered)}/{len(self._relevant_fact_ids)}\n"
+            f"Action types used: {len(self._action_types_used)}\n"
+            f"Repeated queries: {self._repeated_query_count}"
         )
 
-        return RewardCalculator.submit_reward(self._final_score)
+        reward = RewardCalculator.submit_reward(self._final_score)
+        reward.rubric_scores = result["rubrics"]
+        return reward
 
     # --- helpers ---
 

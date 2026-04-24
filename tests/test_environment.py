@@ -164,6 +164,19 @@ class TestHypothesize:
             action = Action(action_type=ActionType.HYPOTHESIZE, cause_entity_id="commit-wrong")
             obs = easy_env.step(action)
         assert obs.wrong_hypotheses == 3
+        
+    def test_hypothesis_cap(self, easy_env):
+        # 3 guesses allowed
+        for _ in range(3):
+            action = Action(action_type=ActionType.HYPOTHESIZE, cause_entity_id="commit-wrong")
+            easy_env.step(action)
+        
+        # 4th guess should hit limit
+        action = Action(action_type=ActionType.HYPOTHESIZE, cause_entity_id="commit-a1b2c3")
+        obs = easy_env.step(action)
+        assert "limit reached" in obs.query_result.lower()
+        # Even though correct, shouldn't record or score
+        assert obs.wrong_hypotheses == 3
 
 
 class TestExplainChain:
@@ -175,7 +188,7 @@ class TestExplainChain:
         ]
         action = Action(action_type=ActionType.EXPLAIN_CHAIN, chain=chain)
         obs = easy_env.step(action)
-        assert "similarity: 1.00" in obs.query_result
+        assert "close" in obs.query_result.lower()
 
     def test_partial_chain(self, easy_env):
         chain = [
@@ -184,7 +197,7 @@ class TestExplainChain:
         ]
         action = Action(action_type=ActionType.EXPLAIN_CHAIN, chain=chain)
         obs = easy_env.step(action)
-        assert "similarity" in obs.query_result.lower()
+        assert "partially" in obs.query_result.lower() or "revise" in obs.query_result.lower()
 
     def test_wrong_chain(self, easy_env):
         chain = [
@@ -193,7 +206,7 @@ class TestExplainChain:
         action = Action(action_type=ActionType.EXPLAIN_CHAIN, chain=chain)
         obs = easy_env.step(action)
         # Similarity should be low
-        assert "similarity" in obs.query_result.lower()
+        assert "revise" in obs.query_result.lower()
 
 
 class TestSubmit:
