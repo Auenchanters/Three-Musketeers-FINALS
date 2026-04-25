@@ -2,6 +2,7 @@
 # requires-python = ">=3.10"
 # dependencies = [
 #   "huggingface_hub>=0.24.0",
+#   "hf_transfer>=0.1.6",
 # ]
 # ///
 """
@@ -41,8 +42,59 @@ import os
 import shutil
 import subprocess
 import sys
+import threading
 import time
 from pathlib import Path
+
+# Force unbuffered stdout/stderr inside the container. HF Jobs streams the
+# job's stdout to the dashboard, but Python defaults to block-buffered when
+# stdout is not a TTY (which it never is inside a job container) — so a
+# silent SFT phase looks "hung" for 20+ min when it's actually working.
+os.environ.setdefault("PYTHONUNBUFFERED", "1")
+try:
+    sys.stdout.reconfigure(line_buffering=True)  # type: ignore[attr-defined]
+    sys.stderr.reconfigure(line_buffering=True)  # type: ignore[attr-defined]
+except Exception:
+    pass
+
+# Switch HF Hub to the high-throughput Rust transfer client. Cuts a fresh
+# 7B model download (~15 GB) from ~12 min to ~2-3 min on an L4 container.
+# DEFAULT: OFF. We've seen the Rust binary panic silently inside a uv-built
+# Python 3.12 container ("Set HF_DEBUG=1 ..." with no further output and the
+# job effectively hanging at the first download). The standard Python
+# downloader is slower (~12 min for 7B) but observable. Set
+# HF_HUB_ENABLE_HF_TRANSFER=1 in the job env to opt back in.
+os.environ.setdefault("HF_HUB_ENABLE_HF_TRANSFER", "0")
+# Make sure transformers / accelerate / TRL print their own logs at INFO so
+# the SFT phase is visible while it runs (dataset prep, token counts, ...).
+os.environ.setdefault("TRANSFORMERS_VERBOSITY", "info")
+os.environ.setdefault("HF_HUB_VERBOSITY", "info")
+os.environ.setdefault("ACCELERATE_LOG_LEVEL", "INFO")
+
+
+def _heartbeat(label: str, interval: float = 30.0) -> threading.Event:
+    """Spawn a background thread that prints a heartbeat every ``interval``s.
+
+    Returns the stop event — call ``event.set()`` to terminate the thread.
+    Used to surface progress through silent phases (model download, dataset
+    tokenization, first SFT optimizer step) so a stalled job is never
+    confused with a slow but healthy one.
+    """
+    stop = threading.Event()
+    t0 = time.time()
+
+    def _beat() -> None:
+        n = 0
+        while not stop.wait(interval):
+            n += 1
+            print(
+                f"[hf-job] heartbeat {label} t+{int(time.time() - t0)}s (#{n} alive)",
+                flush=True,
+            )
+
+    th = threading.Thread(target=_beat, daemon=True)
+    th.start()
+    return stop
 
 
 def _run(cmd, **kw):
@@ -343,7 +395,11 @@ def main() -> int:
     sys.path.insert(0, str(WORK))
 
     print("[hf-job] installing requirements-train.txt (~3 min)")
-    _install("requirements-train.txt")
+    install_hb = _heartbeat("pip-install", interval=30.0)
+    try:
+        _install("requirements-train.txt")
+    finally:
+        install_hb.set()
 
     # Sanity print: which GPU did we land on?
     import torch  # noqa: E402
@@ -422,9 +478,36 @@ def main() -> int:
         kwargs["gradient_checkpointing_kwargs"] = {"use_reentrant": False}
         kwargs["bf16"] = True
         kwargs["fp16"] = False  # mutually exclusive with bf16
+        # Don't try to ship logs to wandb / tensorboard / aim / etc. — none of
+        # those services are configured inside HF Jobs and the trainer can
+        # silently block on them. Force "none" + frequent step logging so
+        # progress is visible in the job's stdout instead.
+        kwargs.setdefault("report_to", "none")
+        kwargs.setdefault("logging_steps", 1)
+        kwargs.setdefault("logging_first_step", True)
+        kwargs.setdefault("disable_tqdm", False)
         _orig_init(self, *args, **kwargs)
 
     SFTConfig.__init__ = _patched_init
+
+    # train.py loads the base model with torch_dtype=fp16 (legacy default).
+    # Combined with our bf16 SFTConfig that creates a silent dtype mismatch
+    # which TRL papers over by re-casting weights at every fwd/bwd pass —
+    # ~10% slower than loading in bf16 directly. Patch from_pretrained so
+    # the model lands in bf16 to match the trainer.
+    from transformers import AutoModelForCausalLM as _Auto  # noqa: E402
+    import torch as _torch  # noqa: E402
+
+    _orig_fp = _Auto.from_pretrained.__func__ if hasattr(_Auto.from_pretrained, "__func__") else _Auto.from_pretrained
+
+    def _patched_from_pretrained(cls, *args, **kwargs):
+        if _torch.cuda.is_available():
+            kwargs["torch_dtype"] = _torch.bfloat16
+            kwargs.setdefault("attn_implementation", "sdpa")
+        return _orig_fp(cls, *args, **kwargs)
+
+    _Auto.from_pretrained = classmethod(_patched_from_pretrained)
+    print("[hf-job] patched AutoModelForCausalLM.from_pretrained -> bf16 + sdpa")
 
     # EVAL_ONLY shortcut: skip SFT, optionally pull an external adapter,
     # and benchmark. Works for ANY HF causal LM (raw or with PEFT adapter)
@@ -488,13 +571,20 @@ def main() -> int:
     evaluate_agents(n_seeds=eval_seeds)
 
     print(f"[hf-job] [3/4] SFT base={BASE_MODEL} epochs={epochs} bs=1 seq={MAX_SEQ} bf16+grad-ckpt")
-    run_sft(
-        model_name=BASE_MODEL,
-        output_dir="sft_output",
-        epochs=epochs,
-        batch_size=1,
-        max_seq_length=MAX_SEQ,
-    )
+    print(f"[hf-job] hf_transfer enabled: {os.environ.get('HF_HUB_ENABLE_HF_TRANSFER')}")
+    sft_hb = _heartbeat("sft", interval=20.0)
+    sft_t0 = time.time()
+    try:
+        run_sft(
+            model_name=BASE_MODEL,
+            output_dir="sft_output",
+            epochs=epochs,
+            batch_size=1,
+            max_seq_length=MAX_SEQ,
+        )
+    finally:
+        sft_hb.set()
+        print(f"[hf-job] SFT phase done in {time.time() - sft_t0:.1f}s", flush=True)
 
     # Push the adapter NOW, before eval. Eval can be slow / cancellable; we
     # never want to lose the actual training artefact to a slow eval phase.

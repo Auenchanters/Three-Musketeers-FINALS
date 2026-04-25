@@ -20,7 +20,7 @@ tags:
 [![HF Space](https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-PostmortemEnv-blue)](https://huggingface.co/spaces/Auenchanters/postmortemenv)
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/Auenchanters/Three-Musketeers-FINALS/blob/main/train_notebook.ipynb)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-97%20passing-brightgreen)](tests/)
+[![Tests](https://img.shields.io/badge/tests-133%20passing-brightgreen)](tests/)
 
 # PostmortemEnv
 
@@ -115,6 +115,21 @@ Source: [`training_data/evaluation_results.json`](training_data/evaluation_resul
 
 > **A note on honesty.** Our previous SFT artifact (a `facebook/opt-125m` run) showed identical 0.160 means across all four epochs, meaning training never affected the policy's outputs. We deleted it rather than ship a phantom result. The pipeline is fully wired (see "Train your own agent" below); the SFT row in the table will fill in once the GPU run lands. Frontier-model rows (Claude Haiku, GPT-4o-mini, Llama-3.2-1B) are produced by [`scripts/run_frontier_benchmark.py`](scripts/run_frontier_benchmark.py) after exporting `ANTHROPIC_API_KEY` / `OPENAI_API_KEY`.
 
+### Live in-browser training (no GPU, no API key)
+
+The "Live training" panel in the UI runs an on-policy REINFORCE softmax agent against the **same `PostmortemEnvironment` reward signal** the SFT/GRPO pipelines optimise. Hit **Start training** and watch the rolling-mean curve climb above the random baseline in ~15 seconds — fresh from a uniform-random policy, no pre-recorded curve. Reproduce locally with `python smoke_full_pipeline.py`:
+
+| Task | Random baseline | Trained (rolling mean @ 500 ep) | Absolute lift | Wall clock |
+|---|---:|---:|---:|---:|
+| `task1_recent_deploy`            | 0.274 | **0.657** | **+0.383** | 2.3 s |
+| `task2_cascade_chain`            | 0.252 | **0.449** | **+0.197** | 3.1 s |
+| `task3_correlated_cause`         | 0.256 | **0.619** | **+0.362** | 3.0 s |
+| `task4_multi_region_failover`    | 0.293 | **0.380** | **+0.086** | 3.9 s |
+| `task5_data_corruption_cascade`  | 0.286 | **0.658** | **+0.372** | 2.4 s |
+| **Mean (5 tasks)**               | 0.272 | **0.553** | **+0.280** (≈ 2.0×) | 14.7 s |
+
+Source: [`training_data/live_training_smoke.json`](training_data/live_training_smoke.json), regenerated every time you run `python smoke_full_pipeline.py`. The same loop powers the on-page "Live training" chart at [`web/training_loop.py`](web/training_loop.py); the UI deliberately throttles to ~30 ms/episode so the curve animates while a judge watches.
+
 ### Same task, two agents — `task1_recent_deploy` (a connection-pool regression)
 
 ```text
@@ -139,7 +154,7 @@ Oracle climbs the dependency graph, then submits. Random spams `query_logs` unti
 git clone https://github.com/Auenchanters/Three-Musketeers-FINALS.git
 cd Three-Musketeers-FINALS
 pip install -r requirements.txt
-python -m pytest tests/ -q                  # 97 tests, ~6 s on a laptop
+python -m pytest tests/ -q                  # 133 tests, ~4 s on a laptop
 python test_oracle_e2e.py                   # task1: 0.96 task2: 0.97 task3: 0.98 ALL PASS
 uvicorn app:app --host 0.0.0.0 --port 7860  # serves the env + live UI at http://localhost:7860
 ```
@@ -234,7 +249,7 @@ This is a lightweight version of the self-play adaptive-curriculum loop from The
 - **Honest, reproducible benchmark.** The 0.10 → 0.98 Random-vs-Oracle gap is computed from real episodes whose JSON is in the repo. Anyone can rerun `python train.py evaluate --n-seeds 10` and verify.
 - **Dense reward, not sparse.** Information gain is rewarded per step, so agents do not drown in sparse-reward exploration collapse — `data/seed_generator.py` produces 10K unique scenarios with non-trivial signal on every step.
 - **Fully deterministic grader.** Five composable rubrics, Jaccard node + edge similarity for the chain, hard clamping for OpenEnv validator compliance. No LLM-as-judge anywhere — what you score is what you get.
-- **97-test suite, all passing.** Engine, grader, environment, generator, agents, runner, curriculum. Run `python -m pytest tests/ -q` and read the green.
+- **133-test suite, all passing.** Engine, grader, environment, generator, agents, runner, curriculum, training stream, action-parser hardening, action validation. Run `python -m pytest tests/ -q` and read the green.
 - **Live UI judges actually want to play with.** SSE-streamed investigation console, animated dependency graph, replay, BYO-key LLM agent. Built explicitly to make the demo wow-able in five seconds, not five minutes.
 - **End-to-end pipeline, not a demo of one piece.** Procedural data → SFT → evaluation → plotting → ELO curriculum → GRPO scaffold, all behind a single `python train.py full` command.
 
@@ -288,7 +303,7 @@ PostmortemEnv/
 |   +-- seed_generator.py     # Procedural scenario generator
 +-- web/                      # Live UI (FastAPI + SSE) + agent runners
 +-- static/                   # Investigation console (HTML/CSS/JS)
-+-- tests/                    # 97 unit tests (engine + grader + agents + curriculum)
++-- tests/                    # 133 unit tests (engine + grader + agents + curriculum + training + parsers + validation)
 +-- Dockerfile, openenv.yaml, requirements*.txt
 ```
 

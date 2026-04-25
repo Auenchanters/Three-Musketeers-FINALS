@@ -27,6 +27,7 @@ import asyncio
 import json
 import os
 import random
+import re
 from typing import Any, AsyncGenerator
 
 from data.generator import load_solution
@@ -344,7 +345,14 @@ class LLMAgent:
                 "type": "thought",
                 "text": f"(step {step}) {raw[:220]}",
             }
-            action = Action(**action_dict)
+            try:
+                action = Action(**action_dict)
+            except Exception as exc:  # noqa: BLE001
+                yield {
+                    "type": "thought",
+                    "text": f"Invalid action shape ({exc}); submitting empty.",
+                }
+                action = Action(action_type=ActionType.SUBMIT, final_cause="", final_chain=[])
             obs = env.step(action)
             summary = _obs_summary(obs)
 
@@ -516,9 +524,18 @@ class LLMAgent:
         }
 
 def _parse_action_json(raw: str) -> dict[str, Any]:
-    """Extract the first valid JSON object from a model response."""
+    """Extract the first valid JSON object from a model response.
+
+    Tolerates the failure modes we observed during SFT debugging on Qwen2.5
+    and DeepSeek R1 distill variants:
+      1) Markdown code fences (```json ... ``` or ``` ... ```).
+      2) ``<think> ... </think>`` reasoning blocks (DeepSeek R1).
+      3) The model emitting ``"action"`` instead of the schema's ``"action_type"``.
+      4) Extra prose before/after a single JSON object.
+    """
     s = raw.strip()
-    # Strip fences like ```json ... ```
+    if "<think>" in s and "</think>" in s:
+        s = re.sub(r"<think>.*?</think>", "", s, flags=re.DOTALL).strip()
     if s.startswith("```"):
         first_nl = s.find("\n")
         last_fence = s.rfind("```")
@@ -529,7 +546,10 @@ def _parse_action_json(raw: str) -> dict[str, Any]:
     if start == -1 or end == -1 or end <= start:
         raise ValueError("no JSON object found")
     candidate = s[start : end + 1]
-    return json.loads(candidate)
+    obj = json.loads(candidate)
+    if isinstance(obj, dict) and "action_type" not in obj and "action" in obj:
+        obj["action_type"] = obj.pop("action")
+    return obj
 
 
 # ---------------------------------------------------------------------------
@@ -605,7 +625,16 @@ class HFInferenceAgent:
                 action_dict = {"action_type": "submit", "final_cause": "", "final_chain": []}
 
             yield {"type": "thought", "text": f"(step {step}) {raw[:220]}"}
-            action = Action(**action_dict)
+            # Action(**dict) can raise on bogus action_type or wrong field types.
+            # Don't let one bad LLM turn kill the whole SSE stream.
+            try:
+                action = Action(**action_dict)
+            except Exception as exc:  # noqa: BLE001
+                yield {
+                    "type": "thought",
+                    "text": f"Invalid action shape ({exc}); submitting empty.",
+                }
+                action = Action(action_type=ActionType.SUBMIT, final_cause="", final_chain=[])
             obs = env.step(action)
             summary = _obs_summary(obs)
 

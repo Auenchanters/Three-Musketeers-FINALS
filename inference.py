@@ -239,26 +239,36 @@ def format_observation(obs: dict) -> str:
 
 
 def parse_action(text: str) -> dict:
-    """Parse LLM response text into action dict."""
+    """Parse LLM response text into action dict.
+
+    Tolerates the three failure modes we observed during the SFT debugging
+    runs against Qwen2.5-1.5B / 7B / 14B:
+      1) Markdown code fences around the JSON (```json ... ``` or ``` ... ```).
+      2) The model emitting ``"action"`` instead of the schema's ``"action_type"``.
+      3) Extra prose before/after a single JSON object.
+    """
     text = text.strip()
 
-    # Handle markdown code blocks
     if "```json" in text:
         text = text.split("```json")[1].split("```")[0].strip()
     elif "```" in text:
-        text = text.split("```")[1].split("```")[0].strip()
+        parts = text.split("```")
+        if len(parts) >= 3:
+            text = parts[1].strip()
 
-    # Try to find JSON object
     start = text.find("{")
     end = text.rfind("}") + 1
     if start >= 0 and end > start:
         json_str = text[start:end]
         try:
-            return json.loads(json_str)
+            obj = json.loads(json_str)
+            if isinstance(obj, dict):
+                if "action_type" not in obj and "action" in obj:
+                    obj["action_type"] = obj.pop("action")
+                return obj
         except json.JSONDecodeError:
             pass
 
-    # Fallback: query_logs on the first service so we don't waste a step
     _warn(f"Could not parse LLM response: {text[:200]}")
     return {"action_type": "query_logs", "service": "data", "keyword": "error", "reason": "Parse failure fallback"}
 

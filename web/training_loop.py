@@ -409,10 +409,24 @@ class _LearningStore:
     ) -> LearningSession:
         async with self._lock:
             if len(self._sessions) >= self._max:
-                oldest = sorted(
-                    self._sessions.values(), key=lambda s: s.started_at
-                )[0]
-                self._sessions.pop(oldest.session_id, None)
+                # Only evict terminal sessions — popping an in-progress
+                # session leaves its run() coroutine writing to a Queue
+                # that nothing reads anymore (subscribers can never re-
+                # attach because the get() call returns None).
+                terminal = [
+                    s for s in self._sessions.values()
+                    if s.status in ("done", "error")
+                ]
+                if terminal:
+                    oldest = sorted(terminal, key=lambda s: s.ended_at or s.started_at)[0]
+                    self._sessions.pop(oldest.session_id, None)
+                else:
+                    # All sessions still running — fall back to evicting
+                    # the absolute oldest. Better than refusing to start.
+                    oldest = sorted(
+                        self._sessions.values(), key=lambda s: s.started_at
+                    )[0]
+                    self._sessions.pop(oldest.session_id, None)
             sess = LearningSession(
                 session_id=uuid.uuid4().hex[:12],
                 task_id=task_id,
