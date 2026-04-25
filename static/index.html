@@ -292,6 +292,105 @@
         </details>
       </aside>
     </div>
+
+    <!-- ============================ LIVE TRAINING ============================ -->
+    <!--
+      Real REINFORCE trains in-process against the same PostmortemEnvironment
+      reward signal SFT/GRPO use. Each click is a fresh on-policy training run
+      — no pre-recorded curve, no LLM, just the discrete action policy
+      learning from the env's terminal score. Stream contract is in
+      web/runner.py at /api/training/start + /api/training/stream/{id}.
+    -->
+    <section class="panel panel-training" aria-labelledby="trainingTitle">
+      <header class="panel-head">
+        <div>
+          <p class="panel-eyebrow">Live training</p>
+          <h2 id="trainingTitle" class="panel-title">Watch a policy learn from scratch.</h2>
+          <p class="panel-sub">
+            REINFORCE trains a softmax policy against the env's reward signal —
+            the same signal the SFT and GRPO pipelines optimise. Every click
+            is a fresh run from a uniform-random policy. The trained curve
+            should visibly climb above the random baseline within ~15&nbsp;seconds.
+          </p>
+        </div>
+        <div class="panel-meta" id="trainingMeta" aria-label="Training metadata">
+          <span class="meta-chip">algo <strong>REINFORCE</strong></span>
+          <span class="meta-chip">runtime <strong id="trainingRuntime">local</strong></span>
+        </div>
+      </header>
+
+      <div class="training-toolbar">
+        <div class="training-control">
+          <label class="field-label" for="trainingTaskSelect">
+            <span class="field-step" aria-hidden="true">A</span>
+            Task
+          </label>
+          <select id="trainingTaskSelect" class="select-native">
+            <option value="" disabled selected>Loading scenarios…</option>
+          </select>
+        </div>
+        <div class="training-control training-control-eps">
+          <label class="field-label" for="trainingEpsInput">
+            <span class="field-step" aria-hidden="true">B</span>
+            Episodes
+          </label>
+          <input id="trainingEpsInput" class="input training-eps-input"
+                 type="number" min="50" max="600" step="50" value="500" />
+        </div>
+        <div class="training-control training-control-go">
+          <button id="trainingStartBtn" class="btn btn-primary" type="button">
+            <span class="btn-label">Start training</span>
+            <span class="btn-kbd" aria-hidden="true">⇧↵</span>
+          </button>
+          <p class="run-status" id="trainingStatus" aria-live="polite" role="status"></p>
+        </div>
+      </div>
+
+      <div class="training-summary" aria-live="polite">
+        <div class="training-stat">
+          <span class="training-stat-label">Episode</span>
+          <span class="training-stat-value" id="trainingEpisodeNow">— / —</span>
+        </div>
+        <div class="training-stat">
+          <span class="training-stat-label">Random baseline</span>
+          <span class="training-stat-value training-stat-baseline" id="trainingBaseline">—</span>
+        </div>
+        <div class="training-stat">
+          <span class="training-stat-label">Rolling mean</span>
+          <span class="training-stat-value training-stat-trained" id="trainingRolling">—</span>
+        </div>
+        <div class="training-stat">
+          <span class="training-stat-label">Lift over random</span>
+          <span class="training-stat-value training-stat-lift" id="trainingLift">—</span>
+        </div>
+      </div>
+
+      <div class="training-chart" id="trainingChart" role="img"
+           aria-label="Live reward-vs-episode chart with random baseline reference">
+        <!-- Chart is rendered via static/app.js into this container as SVG. -->
+        <div class="training-chart-empty" id="trainingChartEmpty">
+          <p class="training-chart-empty-title">Press <kbd>Start training</kbd> to begin a fresh run.</p>
+          <p class="training-chart-empty-sub">
+            The agent starts at the random baseline (~0.25) and learns from terminal-episode reward.
+          </p>
+        </div>
+      </div>
+
+      <div class="training-legend" aria-hidden="true">
+        <span class="training-legend-item">
+          <span class="training-legend-swatch training-swatch-baseline"></span>
+          Random baseline (uniform-random policy, 12-episode estimate)
+        </span>
+        <span class="training-legend-item">
+          <span class="training-legend-swatch training-swatch-trained"></span>
+          Trained agent (rolling mean of last 20 episodes)
+        </span>
+        <span class="training-legend-item">
+          <span class="training-legend-swatch training-swatch-raw"></span>
+          Per-episode reward (raw)
+        </span>
+      </div>
+    </section>
   </main>
 
   <footer class="site-footer">

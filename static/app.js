@@ -45,6 +45,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   bindThemeToggle();
   bindRunForm();
   bindHfTokenReveal();
+  bindTrainingPanel();
   renderSegments($("scoreFill"), 0);
   renderSegments($("budgetFill"), 0);
 
@@ -338,6 +339,23 @@ function renderTaskSelect() {
     sel.appendChild(opt);
   }
   sel.addEventListener("change", () => selectTask(sel.value));
+
+  // Mirror the same task list into the live-training panel's selector.
+  // Default it to a task where REINFORCE shows a clear lift in <500 episodes.
+  const trainSel = $("trainingTaskSelect");
+  if (trainSel) {
+    trainSel.innerHTML = "";
+    const PREFERRED_DEFAULT = "task5_data_corruption_cascade";
+    for (const t of state.tasks) {
+      const opt = document.createElement("option");
+      opt.value = t.task_id;
+      opt.textContent = `${t.name}  ·  ${t.difficulty}`;
+      trainSel.appendChild(opt);
+    }
+    const def = state.tasks.find((t) => t.task_id === PREFERRED_DEFAULT)
+      || state.tasks[0];
+    if (def) trainSel.value = def.task_id;
+  }
 }
 
 function selectTask(id) {
@@ -957,4 +975,387 @@ function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, (c) => ({
     "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
   }[c]));
+}
+
+// =============================================================================
+// Live training panel
+// =============================================================================
+//
+// Subscribes to /api/training/stream/{id} and incrementally draws an SVG chart
+// of (rolling-mean reward vs. episode) against the random baseline. Every
+// "Start training" click is a *fresh* on-policy REINFORCE run — there's no
+// pre-recorded curve, the points fill in left-to-right as the policy actually
+// learns. See web/runner.py and web/training_loop.py for the backend.
+
+const SVG_NS = "http://www.w3.org/2000/svg";
+
+const trainingState = {
+  sessionId: null,
+  eventSource: null,
+  nEpisodes: 500,
+  randomBaseline: null,
+  // Each metric event: { episode, score, rolling_mean, lift_over_random, ... }
+  points: [],
+  // Cached chart geometry so we can redraw on resize without re-laying-out.
+  geom: null,
+};
+
+function bindTrainingPanel() {
+  const btn = $("trainingStartBtn");
+  if (!btn) return;
+  btn.addEventListener("click", () => startTraining());
+
+  // Shift+Enter triggers training (matches the run panel's ⌘+Enter UX).
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && e.shiftKey && !(e.metaKey || e.ctrlKey)) {
+      const target = e.target;
+      if (target && target.matches("input,textarea,select,[contenteditable=true]")) {
+        return;
+      }
+      e.preventDefault();
+      startTraining();
+    }
+  });
+
+  // Re-paint the chart on resize so it stays sharp on viewport changes.
+  let resizeRaf = 0;
+  window.addEventListener("resize", () => {
+    if (!trainingState.points.length) return;
+    cancelAnimationFrame(resizeRaf);
+    resizeRaf = requestAnimationFrame(() => paintTrainingChart());
+  });
+}
+
+async function startTraining() {
+  const sel = $("trainingTaskSelect");
+  const epsInput = $("trainingEpsInput");
+  const taskId = sel?.value;
+  if (!taskId) {
+    setTrainingStatus("Pick a task first.", "error");
+    return;
+  }
+  const nEpisodes = clamp(parseInt(epsInput?.value, 10) || 500, 50, 600);
+  if (epsInput) epsInput.value = String(nEpisodes);
+
+  // Tear down any previous run.
+  if (trainingState.eventSource) {
+    trainingState.eventSource.close();
+    trainingState.eventSource = null;
+  }
+  trainingState.points = [];
+  trainingState.randomBaseline = null;
+  trainingState.nEpisodes = nEpisodes;
+  trainingState.sessionId = null;
+
+  resetTrainingSummary();
+  resetTrainingChart();
+  setTrainingStatus("Estimating random baseline…", "");
+
+  const btn = $("trainingStartBtn");
+  if (btn) {
+    btn.disabled = true;
+    const lbl = btn.querySelector(".btn-label");
+    if (lbl) lbl.textContent = "Training…";
+  }
+
+  try {
+    const res = await fetch("/api/training/start", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ task_id: taskId, n_episodes: nEpisodes }),
+    });
+    if (!res.ok) {
+      const txt = await res.text();
+      throw new Error(`HTTP ${res.status}: ${txt}`);
+    }
+    const meta = await res.json();
+    trainingState.sessionId = meta.session_id;
+    trainingState.nEpisodes = meta.n_episodes;
+    const runtimeEl = $("trainingRuntime");
+    if (runtimeEl) runtimeEl.textContent = meta.runtime || "local";
+    subscribeTraining(meta.session_id);
+  } catch (e) {
+    setTrainingStatus(`Failed to start: ${e.message}`, "error");
+    resetTrainingButton();
+  }
+}
+
+function subscribeTraining(sessionId) {
+  const es = new EventSource(`/api/training/stream/${sessionId}`);
+  trainingState.eventSource = es;
+
+  es.addEventListener("baselines", (e) => onTrainingBaselines(JSON.parse(e.data)));
+  es.addEventListener("metric",    (e) => onTrainingMetric(JSON.parse(e.data)));
+  es.addEventListener("done",      (e) => onTrainingDone(JSON.parse(e.data)));
+  es.addEventListener("error",     (e) => {
+    try {
+      const data = JSON.parse(e.data);
+      setTrainingStatus(data.message || "stream error", "error");
+    } catch {/* heartbeat */}
+    resetTrainingButton();
+    es.close();
+    trainingState.eventSource = null;
+  });
+  es.addEventListener("_eof", () => {
+    es.close();
+    trainingState.eventSource = null;
+  });
+  // EventSource auto-reconnects on transient network errors; only the
+  // server-emitted "error" event above is fatal.
+}
+
+function onTrainingBaselines(ev) {
+  trainingState.randomBaseline = ev.random;
+  trainingState.nEpisodes = ev.n_episodes || trainingState.nEpisodes;
+  $("trainingBaseline").textContent = formatScore(ev.random);
+  setTrainingStatus(
+    `Training on ${shortTaskName(ev.task_id)} · ${ev.action_menu_size} actions · ${ev.n_episodes} episodes`,
+    "ok",
+  );
+  paintTrainingChart();
+}
+
+function onTrainingMetric(ev) {
+  trainingState.points.push(ev);
+  $("trainingEpisodeNow").textContent = `${ev.episode} / ${trainingState.nEpisodes}`;
+  $("trainingRolling").textContent = formatScore(ev.rolling_mean);
+  const lift = ev.lift_over_random;
+  const liftEl = $("trainingLift");
+  liftEl.textContent = `${lift >= 0 ? "+" : ""}${lift.toFixed(3)}`;
+  liftEl.classList.toggle("negative", lift < 0);
+  paintTrainingChart();
+}
+
+function onTrainingDone(ev) {
+  const lift = ev.lift_over_random;
+  const sign = lift >= 0 ? "+" : "";
+  setTrainingStatus(
+    `Done — final rolling mean ${ev.final_rolling_mean.toFixed(3)} (${sign}${lift.toFixed(3)} vs random) over ${ev.n_episodes} episodes.`,
+    lift > 0.05 ? "ok" : "",
+  );
+  resetTrainingButton();
+  paintTrainingChart(/* terminal */ true);
+}
+
+// ---------- chart ----------------------------------------------------------
+
+function resetTrainingChart() {
+  const host = $("trainingChart");
+  if (!host) return;
+  host.classList.remove("has-data");
+  // Keep the empty-state node, drop any prior svg.
+  Array.from(host.querySelectorAll("svg")).forEach((s) => s.remove());
+}
+
+function resetTrainingSummary() {
+  $("trainingEpisodeNow").textContent = `0 / ${trainingState.nEpisodes}`;
+  $("trainingBaseline").textContent = "—";
+  $("trainingRolling").textContent = "—";
+  const liftEl = $("trainingLift");
+  liftEl.textContent = "—";
+  liftEl.classList.remove("negative");
+}
+
+function paintTrainingChart(terminal = false) {
+  const host = $("trainingChart");
+  if (!host) return;
+  const points = trainingState.points;
+  const baseline = trainingState.randomBaseline;
+  if (!points.length && baseline === null) return;
+
+  host.classList.add("has-data");
+
+  // Layout: pad room for axis labels on left + bottom.
+  const rect = host.getBoundingClientRect();
+  const W = Math.max(420, Math.floor(rect.width - 36));
+  const H = 320;
+  const pad = { top: 18, right: 24, bottom: 36, left: 44 };
+  const innerW = W - pad.left - pad.right;
+  const innerH = H - pad.top - pad.bottom;
+
+  const xMax = Math.max(trainingState.nEpisodes, 1);
+  // Y-axis fixed 0..1 — env reward is bounded, and a fixed scale lets the
+  // viewer see the curve climb toward the ceiling instead of having the
+  // axis auto-rescale and hide progress.
+  const yMin = 0, yMax = 1;
+
+  const xOf = (ep) => pad.left + (ep / xMax) * innerW;
+  const yOf = (s) => pad.top + (1 - (s - yMin) / (yMax - yMin)) * innerH;
+
+  // (Re)build the SVG from scratch each repaint. The chart is small (≤500
+  // points) so this is cheaper than a diff renderer and keeps the code
+  // legible.
+  const svg = document.createElementNS(SVG_NS, "svg");
+  svg.classList.add("training-chart-svg");
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  svg.setAttribute("preserveAspectRatio", "none");
+  svg.setAttribute("role", "img");
+
+  appendGridAndAxes(svg, pad, innerW, innerH, xMax, yMin, yMax);
+
+  if (baseline !== null && Number.isFinite(baseline)) {
+    const yb = yOf(baseline);
+    const line = document.createElementNS(SVG_NS, "line");
+    line.classList.add("training-baseline-line");
+    line.setAttribute("x1", pad.left);
+    line.setAttribute("x2", pad.left + innerW);
+    line.setAttribute("y1", yb);
+    line.setAttribute("y2", yb);
+    svg.appendChild(line);
+
+    const lbl = document.createElementNS(SVG_NS, "text");
+    lbl.classList.add("training-baseline-label");
+    lbl.setAttribute("x", pad.left + innerW - 6);
+    lbl.setAttribute("y", yb - 6);
+    lbl.setAttribute("text-anchor", "end");
+    lbl.textContent = `random ${baseline.toFixed(3)}`;
+    svg.appendChild(lbl);
+  }
+
+  if (points.length) {
+    // Raw per-episode dots (low-opacity primary).
+    const rawG = document.createElementNS(SVG_NS, "g");
+    rawG.classList.add("training-raw-points");
+    for (const p of points) {
+      const c = document.createElementNS(SVG_NS, "circle");
+      c.setAttribute("cx", xOf(p.episode));
+      c.setAttribute("cy", yOf(p.score));
+      c.setAttribute("r", 1.6);
+      rawG.appendChild(c);
+    }
+    svg.appendChild(rawG);
+
+    // Trained-policy rolling-mean line + soft fill underneath.
+    const linePts = points
+      .map((p) => `${xOf(p.episode).toFixed(2)},${yOf(p.rolling_mean).toFixed(2)}`)
+      .join(" ");
+    const last = points[points.length - 1];
+
+    const area = document.createElementNS(SVG_NS, "polygon");
+    area.classList.add("training-trained-area");
+    const xFirst = xOf(points[0].episode).toFixed(2);
+    const xLast = xOf(last.episode).toFixed(2);
+    const yFloor = (pad.top + innerH).toFixed(2);
+    area.setAttribute("points", `${xFirst},${yFloor} ${linePts} ${xLast},${yFloor}`);
+    svg.appendChild(area);
+
+    const line = document.createElementNS(SVG_NS, "polyline");
+    line.classList.add("training-trained-line");
+    line.setAttribute("points", linePts);
+    svg.appendChild(line);
+
+    // Current-position marker — small primary dot at the latest rolling mean.
+    const dot = document.createElementNS(SVG_NS, "circle");
+    dot.classList.add("training-current-marker");
+    dot.setAttribute("cx", xOf(last.episode));
+    dot.setAttribute("cy", yOf(last.rolling_mean));
+    dot.setAttribute("r", terminal ? 4 : 3);
+    svg.appendChild(dot);
+  }
+
+  // Replace any prior svg in-place.
+  Array.from(host.querySelectorAll("svg")).forEach((s) => s.remove());
+  host.appendChild(svg);
+}
+
+function appendGridAndAxes(svg, pad, innerW, innerH, xMax, yMin, yMax) {
+  const grid = document.createElementNS(SVG_NS, "g");
+  grid.classList.add("training-grid");
+
+  const Y_TICKS = [0, 0.25, 0.5, 0.75, 1.0];
+  for (const t of Y_TICKS) {
+    const y = pad.top + (1 - (t - yMin) / (yMax - yMin)) * innerH;
+    const ln = document.createElementNS(SVG_NS, "line");
+    ln.setAttribute("x1", pad.left);
+    ln.setAttribute("x2", pad.left + innerW);
+    ln.setAttribute("y1", y);
+    ln.setAttribute("y2", y);
+    grid.appendChild(ln);
+  }
+  svg.appendChild(grid);
+
+  const axis = document.createElementNS(SVG_NS, "g");
+  axis.classList.add("training-axis");
+
+  const yAx = document.createElementNS(SVG_NS, "line");
+  yAx.setAttribute("x1", pad.left);
+  yAx.setAttribute("x2", pad.left);
+  yAx.setAttribute("y1", pad.top);
+  yAx.setAttribute("y2", pad.top + innerH);
+  axis.appendChild(yAx);
+
+  for (const t of Y_TICKS) {
+    const y = pad.top + (1 - (t - yMin) / (yMax - yMin)) * innerH;
+    const tx = document.createElementNS(SVG_NS, "text");
+    tx.setAttribute("x", pad.left - 8);
+    tx.setAttribute("y", y + 3);
+    tx.setAttribute("text-anchor", "end");
+    tx.textContent = t.toFixed(2);
+    axis.appendChild(tx);
+  }
+
+  const xAx = document.createElementNS(SVG_NS, "line");
+  xAx.setAttribute("x1", pad.left);
+  xAx.setAttribute("x2", pad.left + innerW);
+  xAx.setAttribute("y1", pad.top + innerH);
+  xAx.setAttribute("y2", pad.top + innerH);
+  axis.appendChild(xAx);
+
+  // ~5-6 evenly spaced episode ticks.
+  const N = 5;
+  for (let i = 0; i <= N; i++) {
+    const ep = Math.round((xMax * i) / N);
+    const x = pad.left + (ep / xMax) * innerW;
+    const tx = document.createElementNS(SVG_NS, "text");
+    tx.setAttribute("x", x);
+    tx.setAttribute("y", pad.top + innerH + 16);
+    tx.setAttribute("text-anchor", "middle");
+    tx.textContent = String(ep);
+    axis.appendChild(tx);
+  }
+
+  // Axis labels.
+  const yLabel = document.createElementNS(SVG_NS, "text");
+  yLabel.setAttribute("x", 12);
+  yLabel.setAttribute("y", pad.top + innerH / 2);
+  yLabel.setAttribute("text-anchor", "middle");
+  yLabel.setAttribute("transform", `rotate(-90, 12, ${pad.top + innerH / 2})`);
+  yLabel.textContent = "score";
+  axis.appendChild(yLabel);
+
+  const xLabel = document.createElementNS(SVG_NS, "text");
+  xLabel.setAttribute("x", pad.left + innerW / 2);
+  xLabel.setAttribute("y", pad.top + innerH + 30);
+  xLabel.setAttribute("text-anchor", "middle");
+  xLabel.textContent = "episode";
+  axis.appendChild(xLabel);
+
+  svg.appendChild(axis);
+}
+
+// ---------- helpers --------------------------------------------------------
+
+function setTrainingStatus(msg, kind = "") {
+  const el = $("trainingStatus");
+  if (!el) return;
+  el.dataset.kind = kind;
+  el.textContent = msg;
+}
+
+function resetTrainingButton() {
+  const btn = $("trainingStartBtn");
+  if (!btn) return;
+  btn.disabled = false;
+  const lbl = btn.querySelector(".btn-label");
+  if (lbl) lbl.textContent = "Start training";
+}
+
+function formatScore(v) {
+  if (v === null || v === undefined || !Number.isFinite(v)) return "—";
+  return v.toFixed(3);
+}
+
+function clamp(v, lo, hi) {
+  if (!Number.isFinite(v)) return lo;
+  return Math.max(lo, Math.min(hi, v));
 }

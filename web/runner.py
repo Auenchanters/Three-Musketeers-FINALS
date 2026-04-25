@@ -34,6 +34,7 @@ from engine.environment import PostmortemEnvironment
 from web import curriculum
 from web.agents import HFInferenceAgent, LLMAgent, OracleAgent, RandomAgent
 from web.models_registry import MODELS, get_model, public_list
+from web.training_loop import LearningSession, get_store as get_training_store
 
 RUNS_DIR = Path(__file__).resolve().parent.parent / "training_data" / "runs"
 MAX_RUNS = 50
@@ -393,3 +394,115 @@ async def stream_run(run_id: str, request: Request) -> StreamingResponse:
 def _sse(event: dict[str, Any]) -> bytes:
     payload = json.dumps(event, default=str)
     return f"event: {event.get('type', 'message')}\ndata: {payload}\n\n".encode("utf-8")
+
+
+# ---------------------------------------------------------------------------
+# Live-training routes (REINFORCE on the real env reward — see web/training_loop.py)
+# ---------------------------------------------------------------------------
+#
+# These routes power the "Live training" panel in the UI. The agent itself is
+# the tabular-REINFORCE softmax policy in web.training_loop, training on the
+# *same* PostmortemEnvironment reward signal used by SFT/GRPO. No LLM is
+# involved here — this is a CPU-only learner whose only purpose is to give
+# judges a live, real-time visual proof that *something* in this environment
+# is actually learnable from the reward signal alone.
+#
+# Stream contract (events emitted on /api/training/stream/{id}):
+#   baselines  → { task_id, random, action_menu_size, n_episodes, runtime }
+#   metric     → { episode, score, rolling_mean, best, lift_over_random,
+#                  elapsed_sec }
+#   done       → { final_rolling_mean, lift_over_random, n_episodes, runtime }
+#   error      → { message }
+#   _eof       → terminal sentinel (subscribe loop closes after this)
+
+
+class StartTrainingBody(BaseModel):
+    task_id: str = "task1_recent_deploy"
+    # 500 episodes × 30ms cadence ≈ 15s of demo. Below 200 the curve looks
+    # noisy; above 1000 the policy has plateaued and the user is just waiting.
+    n_episodes: int = 500
+    seed: int | None = None
+
+
+class StartTrainingResponse(BaseModel):
+    session_id: str
+    task_id: str
+    n_episodes: int
+    runtime: str
+
+
+@router.post("/training/start")
+async def start_training(body: StartTrainingBody) -> StartTrainingResponse:
+    # Cap at 600 episodes to keep one demo under ~30s (50ms/ep cadence).
+    n_eps = max(20, min(600, int(body.n_episodes)))
+    store = get_training_store()
+    sess = await store.create(
+        task_id=body.task_id,
+        n_episodes=n_eps,
+        seed=body.seed,
+        runtime="local",
+    )
+    asyncio.create_task(sess.run())
+    return StartTrainingResponse(
+        session_id=sess.session_id,
+        task_id=sess.task_id,
+        n_episodes=sess.n_episodes,
+        runtime=sess.runtime,
+    )
+
+
+@router.get("/training/sessions")
+async def list_training_sessions() -> JSONResponse:
+    return JSONResponse(get_training_store().list())
+
+
+@router.get("/training/stream/{session_id}")
+async def stream_training(
+    session_id: str, request: Request
+) -> StreamingResponse:
+    sess = get_training_store().get(session_id)
+    if not sess:
+        raise HTTPException(404, "training session not found")
+
+    queue: asyncio.Queue = asyncio.Queue()
+    sess.subscribers.append(queue)
+    backlog = list(sess.metrics)
+
+    async def gen() -> AsyncGenerator[bytes, None]:
+        try:
+            for ev in backlog:
+                yield _sse(ev)
+            # If the session terminated *before* this subscriber registered,
+            # the run() coroutine has already pushed the closing `None`
+            # sentinel to every then-known subscriber's queue and returned.
+            # New subscribers never get a sentinel, so a naive
+            # `await queue.get()` would hang forever and clients would see a
+            # silent stall. Detect terminal status from the session itself
+            # and short-circuit with an immediate _eof — the backlog above
+            # already contains every event that was ever emitted.
+            if sess.status in ("done", "error"):
+                yield _sse({"type": "_eof"})
+                return
+            while True:
+                if await request.is_disconnected():
+                    break
+                ev = await queue.get()
+                if ev is None:
+                    yield _sse({"type": "_eof"})
+                    break
+                yield _sse(ev)
+        finally:
+            try:
+                sess.subscribers.remove(queue)
+            except ValueError:
+                pass
+
+    return StreamingResponse(
+        gen(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache, no-transform",
+            "X-Accel-Buffering": "no",
+            "Connection": "keep-alive",
+        },
+    )
