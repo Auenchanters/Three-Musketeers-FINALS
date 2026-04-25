@@ -34,6 +34,13 @@ from datasets import Dataset
 from engine.environment import PostmortemEnvironment
 from models.action import Action, ActionType
 from data.seed_generator import generate_scenario, generate_oracle_solution
+from training_utils import (
+    SYSTEM_PROMPT,
+    action_from_dict,
+    format_observation_compact,
+    parse_action_json,
+    reset_with_scenario,
+)
 
 
 # ── Config ───────────────────────────────────────────────────────────────────
@@ -57,50 +64,14 @@ print()
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
-SYSTEM_PROMPT = (
-    "You are an SRE investigator. Respond with ONLY a JSON object for "
-    "your next action. Actions: query_logs, fetch_trace, diff_commit, "
-    "inspect_config, inspect_infra, hypothesize, explain_chain, submit."
-)
-
-
 def _format_obs(obs_dict: dict) -> str:
     """Compact text representation of an observation for model input."""
-    parts = [
-        f"Task: {obs_dict.get('task_description', '')[:200]}",
-        f"Step: {obs_dict.get('step_number', 0)}/{obs_dict.get('max_steps', 40)}",
-        f"Budget: {obs_dict.get('remaining_budget', 0)}",
-    ]
-    if obs_dict.get("query_result"):
-        parts.append(f"Last result: {obs_dict['query_result'][:300]}")
-    if obs_dict.get("known_facts"):
-        parts.append(f"Known facts: {obs_dict['known_facts'][-5:]}")
-    services = obs_dict.get("service_graph", {})
-    if services:
-        parts.append(f"Services: {list(services.keys())}")
-    commits = obs_dict.get("available_commits", [])
-    if commits:
-        parts.append(f"Commits: {[c.get('hash','?') for c in commits[:6]]}")
-    configs = obs_dict.get("available_config_changes", [])
-    if configs:
-        parts.append(f"Configs: {[c.get('config_id','?') for c in configs[:4]]}")
-    traces = obs_dict.get("available_trace_ids", [])
-    if traces:
-        parts.append(f"Traces: {traces[:4]}")
-    return "\n".join(parts)
+    return format_observation_compact(obs_dict)
 
 
 def _parse_action(text: str) -> dict:
     """Extract JSON action from model output, with fallback."""
-    s = text.strip()
-    start = s.find("{")
-    end = s.rfind("}") + 1
-    if start < 0 or end <= start:
-        return {"action_type": "query_logs", "service": "data", "keyword": "error"}
-    try:
-        return json.loads(s[start:end])
-    except Exception:
-        return {"action_type": "query_logs", "service": "data", "keyword": "error"}
+    return parse_action_json(text)
 
 
 def _reset_with_scenario(env, scenario):
@@ -110,7 +81,7 @@ def _reset_with_scenario(env, scenario):
     :meth:`PostmortemEnvironment.reset_from_scenario` method. Kept under
     the old private name so the existing eval loop reads identically.
     """
-    return env.reset_from_scenario(scenario)
+    return reset_with_scenario(env, scenario, as_dict=False)
 
 
 # ── Step 1: Prepare SFT dataset from oracle demos ───────────────────────────
@@ -221,18 +192,7 @@ def evaluate_model(model, tokenizer, n_seeds=EVAL_SEEDS_PER_DIFF, tag="sft"):
                 action_dict = _parse_action(response)
 
                 try:
-                    action = Action(
-                        action_type=action_dict.get("action_type", "query_logs"),
-                        service=action_dict.get("service"),
-                        keyword=action_dict.get("keyword"),
-                        trace_id=action_dict.get("trace_id"),
-                        commit_hash=action_dict.get("commit_hash"),
-                        config_id=action_dict.get("config_id"),
-                        cause_entity_id=action_dict.get("cause_entity_id"),
-                        chain=action_dict.get("chain"),
-                        final_cause=action_dict.get("final_cause"),
-                        final_chain=action_dict.get("final_chain"),
-                    )
+                    action = action_from_dict(action_dict)
                     obs = env.step(action)
                     episode_rewards.append(float(obs.reward))
                     if obs.done:

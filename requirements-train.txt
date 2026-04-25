@@ -7,3 +7,5 @@ accelerate>=0.33.0
 datasets>=2.18.0
 matplotlib>=3.8.0
 bitsandbytes>=0.43.0
+trackio>=0.2.0
+huggingface_hub>=0.24.0

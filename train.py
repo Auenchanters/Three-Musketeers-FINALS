@@ -25,56 +25,28 @@ from typing import List, Dict, Any
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-SYSTEM_PROMPT = (
-    "You are an expert SRE investigator. Respond with ONLY a JSON object "
-    "containing your next investigation action. Available actions: "
-    "query_logs, fetch_trace, diff_commit, inspect_config, hypothesize, "
-    "explain_chain, submit."
+from training_utils import (
+    SYSTEM_PROMPT,
+    action_from_dict,
+    format_observation_compact,
+    parse_action_json,
+    reset_with_scenario,
 )
+
+
+def _reset_with_scenario(env, scenario):
+    """Backward-compatible alias used by notebooks and older scripts."""
+    return reset_with_scenario(env, scenario, as_dict=True)
+
+
+def _format_obs_compact(obs_dict):
+    """Backward-compatible alias for the shared compact formatter."""
+    return format_observation_compact(obs_dict)
 
 
 # =====================================================================
 # Phase 1: Collect Oracle Demonstrations
 # =====================================================================
-
-def _reset_with_scenario(env, scenario):
-    """Reset env with a scenario dict and return the observation as a dict.
-
-    Thin shim around :meth:`PostmortemEnvironment.reset_from_scenario` kept
-    so existing callers and ``train_notebook.py`` (which imports this name)
-    continue to work without changes. New code should call
-    ``env.reset_from_scenario(scenario)`` directly and call ``.model_dump()``
-    on the returned ``Observation`` if a dict is needed.
-    """
-    return env.reset_from_scenario(scenario).model_dump()
-
-
-def _format_obs_compact(obs_dict):
-    """Format observation for training (compact)."""
-    d = obs_dict
-    lines = [
-        "Task: " + str(d.get("task_description", ""))[:200],
-        "Step: %d/%d" % (d.get("step_number", 0), d.get("max_steps", 40)),
-        "Budget: %d steps remaining" % d.get("remaining_budget", 0),
-    ]
-    for s in d.get("services", []):
-        svc = s if isinstance(s, dict) else (s.model_dump() if hasattr(s, "model_dump") else vars(s))
-        lines.append("  %s: err=%.0f%% deploys=%d" % (
-            svc.get("name", "?"), svc.get("error_rate_during_incident", 0), svc.get("recent_deploy_count", 0)
-        ))
-    commits = d.get("available_commits", [])
-    if commits:
-        for c in commits[:8]:
-            lines.append("  commit %s [%s] %s" % (c.get("hash", "?"), c.get("service", "?"), c.get("message", "")[:60]))
-    facts = d.get("known_facts", [])
-    if facts:
-        lines.append("Known facts (%d):" % len(facts))
-        for f_item in facts[-5:]:
-            lines.append("  > " + str(f_item))
-    qr = d.get("query_result", "")
-    if qr:
-        lines.append("Last result: " + qr[:300])
-    return "\n".join(lines)
 
 
 def collect_demonstrations(n_seeds=20, output_path="training_data"):
@@ -261,7 +233,7 @@ def run_sft(
         save_steps=50,
         save_total_limit=2,
         fp16=torch.cuda.is_available(),
-        max_seq_length=max_seq_length,
+        max_length=max_seq_length,
         dataset_text_field="text",
         report_to="none",
     )
@@ -399,14 +371,8 @@ def run_grpo(
         for completion, task_id in zip(completions, task_ids):
             text = completion if isinstance(completion, str) else str(completion)
             try:
-                start = text.find("{")
-                end = text.rfind("}") + 1
-                if start < 0 or end <= start:
-                    rewards.append(0.01)
-                    continue
-                action_dict = json.loads(text[start:end])
-                action_type = action_dict.get("action_type")
-                if not action_type:
+                action_dict = parse_action_json(text, fallback={"action_type": ""})
+                if not action_dict.get("action_type"):
                     rewards.append(0.01)
                     continue
 
@@ -416,21 +382,7 @@ def run_grpo(
                     continue
 
                 _reset_with_scenario(env, scenario)
-                action = Action(
-                    action_type=action_type,
-                    service=action_dict.get("service"),
-                    keyword=action_dict.get("keyword"),
-                    time_window=action_dict.get("time_window"),
-                    trace_id=action_dict.get("trace_id"),
-                    commit_hash=action_dict.get("commit_hash"),
-                    config_id=action_dict.get("config_id"),
-                    event_id=action_dict.get("event_id"),
-                    cause_entity_id=action_dict.get("cause_entity_id"),
-                    chain=action_dict.get("chain"),
-                    final_cause=action_dict.get("final_cause"),
-                    final_chain=action_dict.get("final_chain"),
-                    reason=action_dict.get("reason"),
-                )
+                action = action_from_dict(action_dict)
                 obs = env.step(action)
                 rewards.append(float(obs.reward))
             except Exception:

@@ -10,8 +10,8 @@ RUN useradd -m -u 1000 user
 WORKDIR /app
 
 # Copy requirements first (Docker cache optimization)
-COPY --chown=user:user requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+COPY --chown=user:user requirements-server.txt .
+RUN pip install --no-cache-dir -r requirements-server.txt
 
 # Copy application code
 COPY --chown=user:user . .
