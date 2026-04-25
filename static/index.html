@@ -390,6 +390,27 @@
           Per-episode reward (raw)
         </span>
       </div>
+
+      <div class="training-rubrics" id="trainingRubrics" hidden aria-live="polite">
+        <h3 class="training-rubrics-title">Where the score comes from (final 20-ep average)</h3>
+        <p class="training-rubrics-sub">
+          Per-rubric decomposition of the trained mean. The chain rubric
+          requires NLP-level extraction of effect strings from logs — that's
+          why a numpy linear policy caps at ~0.66 even with perfect cause
+          attribution.
+        </p>
+        <table class="training-rubrics-table">
+          <thead>
+            <tr>
+              <th>Rubric</th>
+              <th class="num">Weight</th>
+              <th class="num">Mean raw</th>
+              <th class="num">Contribution</th>
+            </tr>
+          </thead>
+          <tbody id="trainingRubricsBody"></tbody>
+        </table>
+      </div>
     </section>
   </main>
 

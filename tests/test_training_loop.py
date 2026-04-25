@@ -191,3 +191,48 @@ def test_tabular_path_still_works_via_kwarg() -> None:
     )
     assert summary["status"] == "done"
     assert summary["n_metrics"] == 80
+
+
+def test_done_event_carries_per_rubric_breakdown() -> None:
+    """The frontend reads rubric_breakdown to show *why* the score is what it is.
+
+    The breakdown is the average over the final 20-ep window of each of the
+    five rubrics (cause/chain/efficiency/investigation/anti_gaming). For a
+    non-NLP policy the chain_accuracy raw score should be ~0.0 (we always
+    submit final_chain=[]) — that's the documented ceiling explanation.
+    """
+    sess = LearningSession(
+        session_id="rb",
+        task_id="task1_recent_deploy",
+        n_episodes=60,
+        seed=42,
+        runtime="test",
+        policy_kind="neural",
+    )
+    asyncio.new_event_loop().run_until_complete(sess.run())
+    done = next(m for m in sess.metrics if m.get("type") == "done")
+    rb = done.get("rubric_breakdown")
+    assert isinstance(rb, list) and len(rb) == 5, f"expected 5 rubrics, got {rb}"
+    names = {r["rubric"] for r in rb}
+    assert names == {
+        "cause_correctness", "chain_accuracy", "efficiency",
+        "investigation_quality", "anti_gaming",
+    }, f"unexpected rubric names: {names}"
+    weights = sum(r["weight"] for r in rb)
+    assert abs(weights - 1.0) < 1e-6, f"weights don't sum to 1: {weights}"
+    # The chain rubric must have a raw score (never None / missing).
+    chain = next(r for r in rb if r["rubric"] == "chain_accuracy")
+    assert "mean_raw_score" in chain
+    assert 0.0 <= chain["mean_raw_score"] <= 1.0
+
+
+def test_env_exposes_final_rubric_breakdown_after_submit() -> None:
+    """The env getter populates after a submit, stays None before."""
+    env = PostmortemEnvironment()
+    env.reset(task_id="task1_recent_deploy")
+    assert env.get_final_rubric_breakdown() is None, \
+        "breakdown should be None before any submit"
+    from models.action import Action, ActionType
+    env.step(Action(action_type=ActionType.SUBMIT, final_cause="commit-a1b2c3", final_chain=[]))
+    rb = env.get_final_rubric_breakdown()
+    assert rb is not None and isinstance(rb, list) and len(rb) == 5

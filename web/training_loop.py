@@ -618,6 +618,11 @@ class LearningSession:
 
             baseline = self.random_baseline
             window: list[float] = []
+            # Per-rubric aggregator — averaged over the final window and
+            # surfaced in the SSE done event so judges can see *why* the
+            # score is what it is (e.g. cause=1.0 chain=0.0 explains the
+            # ~0.66 ceiling for non-NLP policies).
+            rubric_window: list[list[dict[str, Any]]] = []
             window_size = 20
             best = 0.0
 
@@ -648,6 +653,11 @@ class LearningSession:
                 window.append(score)
                 if len(window) > window_size:
                     window.pop(0)
+                rb = env.get_final_rubric_breakdown()
+                if rb is not None:
+                    rubric_window.append(rb)
+                    if len(rubric_window) > window_size:
+                        rubric_window.pop(0)
                 rolling = sum(window) / len(window)
                 if score > best:
                     best = score
@@ -671,6 +681,28 @@ class LearningSession:
                     await asyncio.sleep(0.03)
 
             self.final_mean = sum(window) / max(len(window), 1)
+
+            # Average per-rubric scores over the final window. Each entry in
+            # rubric_window has the same set of rubric names in the same
+            # order (evaluation is deterministic on a single task), so we
+            # can collapse by index. Skip if no submit action was ever taken.
+            rubric_avg: list[dict[str, Any]] = []
+            if rubric_window:
+                n = len(rubric_window[0])
+                for i in range(n):
+                    name = rubric_window[0][i].get("rubric", f"r{i}")
+                    weight = rubric_window[0][i].get("weight", 0.0)
+                    raw_scores = [rb[i].get("raw_score", 0.0) for rb in rubric_window]
+                    weighted_scores = [rb[i].get("weighted_score", 0.0) for rb in rubric_window]
+                    rubric_avg.append({
+                        "rubric": name,
+                        "weight": weight,
+                        "mean_raw_score": round(sum(raw_scores) / len(raw_scores), 4),
+                        "mean_weighted_score": round(
+                            sum(weighted_scores) / len(weighted_scores), 4
+                        ),
+                    })
+
             await self.push({
                 "type": "done",
                 "final_rolling_mean": round(self.final_mean, 4),
@@ -680,6 +712,7 @@ class LearningSession:
                 "n_episodes": self.n_episodes,
                 "runtime": self.runtime,
                 "policy_kind": self.policy_kind,
+                "rubric_breakdown": rubric_avg,
             })
             self.status = "done"
         except Exception as exc:  # noqa: BLE001

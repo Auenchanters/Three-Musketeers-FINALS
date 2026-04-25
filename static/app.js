@@ -1049,6 +1049,8 @@ async function startTraining() {
 
   resetTrainingSummary();
   resetTrainingChart();
+  const rubricHost = $("trainingRubrics");
+  if (rubricHost) rubricHost.hidden = true;
   setTrainingStatus("Estimating random baseline…", "");
 
   const btn = $("trainingStartBtn");
@@ -1108,8 +1110,13 @@ function onTrainingBaselines(ev) {
   trainingState.randomBaseline = ev.random;
   trainingState.nEpisodes = ev.n_episodes || trainingState.nEpisodes;
   $("trainingBaseline").textContent = formatScore(ev.random);
+  // policy_kind ("neural" | "tabular") was added when the in-browser
+  // learner was upgraded from the original 64-state tabular softmax to
+  // a numpy linear policy + value baseline over a 31-dim feature vector.
+  // Show it in the status so judges can see which policy is running.
+  const kind = ev.policy_kind || "policy";
   setTrainingStatus(
-    `Training on ${shortTaskName(ev.task_id)} · ${ev.action_menu_size} actions · ${ev.n_episodes} episodes`,
+    `Training on ${shortTaskName(ev.task_id)} · ${ev.action_menu_size} actions · ${ev.n_episodes} episodes · ${kind}`,
     "ok",
   );
   paintTrainingChart();
@@ -1135,6 +1142,29 @@ function onTrainingDone(ev) {
   );
   resetTrainingButton();
   paintTrainingChart(/* terminal */ true);
+  renderRubricBreakdown(ev.rubric_breakdown);
+}
+
+// Show the rubric decomposition once an episode completes. The breakdown
+// makes the ~0.66 ceiling tangible: judges can see e.g. cause=0.95 but
+// chain=0.0 and immediately understand the structural limitation
+// (chain accuracy needs NLP-level extraction of effect strings).
+function renderRubricBreakdown(rubrics) {
+  const host = $("trainingRubrics");
+  const body = $("trainingRubricsBody");
+  if (!host || !body || !Array.isArray(rubrics) || rubrics.length === 0) return;
+  const fmt = (n) => (typeof n === "number" ? n.toFixed(3) : "—");
+  body.innerHTML = "";
+  for (const r of rubrics) {
+    const tr = document.createElement("tr");
+    tr.innerHTML =
+      `<td>${r.rubric}</td>` +
+      `<td class="num">${fmt(r.weight)}</td>` +
+      `<td class="num">${fmt(r.mean_raw_score)}</td>` +
+      `<td class="num">${fmt(r.mean_weighted_score)}</td>`;
+    body.appendChild(tr);
+  }
+  host.hidden = false;
 }
 
 // ---------- chart ----------------------------------------------------------

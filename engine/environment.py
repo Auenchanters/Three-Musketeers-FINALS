@@ -131,6 +131,7 @@ class PostmortemEnvironment(Environment[Action, Observation, EnvironmentState]):
         self._message: str = ""
         self._last_query_result: str = ""
         self._final_score: Optional[float] = None
+        self._final_rubric_breakdown: Optional[List[Dict[str, Any]]] = None
 
         # Anti-gaming tracking
         self._query_history: List[Tuple[str, str]] = []   # (service, keyword)
@@ -243,6 +244,7 @@ class PostmortemEnvironment(Environment[Action, Observation, EnvironmentState]):
         self._message = f"Investigation started. {self._task_description}"
         self._last_query_result = ""
         self._final_score = None
+        self._final_rubric_breakdown = None
 
         # Reset anti-gaming tracking
         self._query_history = []
@@ -813,6 +815,11 @@ class PostmortemEnvironment(Environment[Action, Observation, EnvironmentState]):
         )
 
         self._final_score = result["score"]
+        # Persist the per-rubric breakdown for downstream consumers
+        # (live training panel surfaces this in the SSE done event so
+        # judges can see *why* the score is what it is — e.g. cause=1.0
+        # but chain=0.0 explains the ~0.66 ceiling for non-NLP policies).
+        self._final_rubric_breakdown = result["rubrics"]
 
         # Build human-readable rubric breakdown
         rubric_lines = []
@@ -929,3 +936,14 @@ class PostmortemEnvironment(Environment[Action, Observation, EnvironmentState]):
         if self._final_score is not None:
             return self._final_score
         return 0.01
+
+    def get_final_rubric_breakdown(self) -> Optional[List[Dict[str, Any]]]:
+        """Per-rubric breakdown of the terminal score, or ``None`` if the
+        episode hasn't called ``submit`` yet (e.g. budget-exhausted runs
+        score from the partial-credit branch and don't populate this).
+
+        Each entry is a dict with ``rubric``, ``raw_score``, ``weight``,
+        and ``weighted_score`` keys — same shape the grader's
+        ``compute_final_score_with_breakdown`` returns.
+        """
+        return self._final_rubric_breakdown

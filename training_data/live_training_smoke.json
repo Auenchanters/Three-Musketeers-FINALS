@@ -1,42 +1,207 @@
 [
   {
     "task_id": "task1_recent_deploy",
+    "seed": 42,
     "elapsed_s": 0.2,
     "episode": 500,
     "rolling_mean": 0.6562,
     "baseline": 0.2743,
-    "lift": 0.3819
+    "lift": 0.3819,
+    "rubric_breakdown": [
+      {
+        "rubric": "cause_correctness",
+        "weight": 0.4,
+        "mean_raw_score": 1.0,
+        "mean_weighted_score": 0.4
+      },
+      {
+        "rubric": "chain_accuracy",
+        "weight": 0.25,
+        "mean_raw_score": 0.0,
+        "mean_weighted_score": 0.0
+      },
+      {
+        "rubric": "efficiency",
+        "weight": 0.15,
+        "mean_raw_score": 0.975,
+        "mean_weighted_score": 0.1462
+      },
+      {
+        "rubric": "investigation_quality",
+        "weight": 0.1,
+        "mean_raw_score": 0.1,
+        "mean_weighted_score": 0.01
+      },
+      {
+        "rubric": "anti_gaming",
+        "weight": 0.1,
+        "mean_raw_score": 1.0,
+        "mean_weighted_score": 0.1
+      }
+    ]
   },
   {
     "task_id": "task2_cascade_chain",
+    "seed": 42,
     "elapsed_s": 0.2,
     "episode": 500,
     "rolling_mean": 0.6596,
     "baseline": 0.2521,
-    "lift": 0.4076
+    "lift": 0.4076,
+    "rubric_breakdown": [
+      {
+        "rubric": "cause_correctness",
+        "weight": 0.4,
+        "mean_raw_score": 1.0,
+        "mean_weighted_score": 0.4
+      },
+      {
+        "rubric": "chain_accuracy",
+        "weight": 0.25,
+        "mean_raw_score": 0.0,
+        "mean_weighted_score": 0.0
+      },
+      {
+        "rubric": "efficiency",
+        "weight": 0.15,
+        "mean_raw_score": 0.9827,
+        "mean_weighted_score": 0.1474
+      },
+      {
+        "rubric": "investigation_quality",
+        "weight": 0.1,
+        "mean_raw_score": 0.1323,
+        "mean_weighted_score": 0.0132
+      },
+      {
+        "rubric": "anti_gaming",
+        "weight": 0.1,
+        "mean_raw_score": 0.99,
+        "mean_weighted_score": 0.099
+      }
+    ]
   },
   {
     "task_id": "task3_correlated_cause",
+    "seed": 42,
     "elapsed_s": 0.2,
     "episode": 500,
     "rolling_mean": 0.6588,
     "baseline": 0.2563,
-    "lift": 0.4025
+    "lift": 0.4025,
+    "rubric_breakdown": [
+      {
+        "rubric": "cause_correctness",
+        "weight": 0.4,
+        "mean_raw_score": 1.0,
+        "mean_weighted_score": 0.4
+      },
+      {
+        "rubric": "chain_accuracy",
+        "weight": 0.25,
+        "mean_raw_score": 0.0,
+        "mean_weighted_score": 0.0
+      },
+      {
+        "rubric": "efficiency",
+        "weight": 0.15,
+        "mean_raw_score": 0.9917,
+        "mean_weighted_score": 0.1488
+      },
+      {
+        "rubric": "investigation_quality",
+        "weight": 0.1,
+        "mean_raw_score": 0.1,
+        "mean_weighted_score": 0.01
+      },
+      {
+        "rubric": "anti_gaming",
+        "weight": 0.1,
+        "mean_raw_score": 1.0,
+        "mean_weighted_score": 0.1
+      }
+    ]
   },
   {
     "task_id": "task4_multi_region_failover",
+    "seed": 42,
     "elapsed_s": 0.2,
     "episode": 500,
     "rolling_mean": 0.6592,
     "baseline": 0.2935,
-    "lift": 0.3658
+    "lift": 0.3658,
+    "rubric_breakdown": [
+      {
+        "rubric": "cause_correctness",
+        "weight": 0.4,
+        "mean_raw_score": 1.0,
+        "mean_weighted_score": 0.4
+      },
+      {
+        "rubric": "chain_accuracy",
+        "weight": 0.25,
+        "mean_raw_score": 0.0,
+        "mean_weighted_score": 0.0
+      },
+      {
+        "rubric": "efficiency",
+        "weight": 0.15,
+        "mean_raw_score": 0.9913,
+        "mean_weighted_score": 0.1487
+      },
+      {
+        "rubric": "investigation_quality",
+        "weight": 0.1,
+        "mean_raw_score": 0.105,
+        "mean_weighted_score": 0.0105
+      },
+      {
+        "rubric": "anti_gaming",
+        "weight": 0.1,
+        "mean_raw_score": 1.0,
+        "mean_weighted_score": 0.1
+      }
+    ]
   },
   {
     "task_id": "task5_data_corruption_cascade",
+    "seed": 42,
     "elapsed_s": 0.1,
     "episode": 500,
     "rolling_mean": 0.638,
     "baseline": 0.2864,
-    "lift": 0.3516
+    "lift": 0.3516,
+    "rubric_breakdown": [
+      {
+        "rubric": "cause_correctness",
+        "weight": 0.4,
+        "mean_raw_score": 0.95,
+        "mean_weighted_score": 0.38
+      },
+      {
+        "rubric": "chain_accuracy",
+        "weight": 0.25,
+        "mean_raw_score": 0.0,
+        "mean_weighted_score": 0.0
+      },
+      {
+        "rubric": "efficiency",
+        "weight": 0.15,
+        "mean_raw_score": 0.9867,
+        "mean_weighted_score": 0.148
+      },
+      {
+        "rubric": "investigation_quality",
+        "weight": 0.1,
+        "mean_raw_score": 0.1,
+        "mean_weighted_score": 0.01
+      },
+      {
+        "rubric": "anti_gaming",
+        "weight": 0.1,
+        "mean_raw_score": 1.0,
+        "mean_weighted_score": 0.1
+      }
+    ]
   }
 ]

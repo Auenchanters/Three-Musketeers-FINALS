@@ -31,17 +31,18 @@ MIN_LIFT = 0.05         # at least +5% absolute over the random baseline
 TIMEOUT_S = 60          # per-task safety net
 
 
-async def _train_one(task_id: str) -> dict:
+async def _train_one(task_id: str, seed: int = 42) -> dict:
     sess = LearningSession(
         session_id=uuid.uuid4().hex[:12],
         task_id=task_id,
         n_episodes=EPISODES,
-        seed=42,
+        seed=seed,
         runtime="test",
     )
     t0 = time.time()
     last_metric: dict | None = None
     last_baseline: float | None = None
+    done_event: dict | None = None
     await sess.run()
     for ev in sess.metrics:
         t = ev.get("type")
@@ -49,20 +50,28 @@ async def _train_one(task_id: str) -> dict:
             last_baseline = ev.get("random")
         elif t in ("metric", "done"):
             last_metric = ev
+        if t == "done":
+            done_event = ev
     dt = time.time() - t0
     assert last_metric is not None, f"no metrics from {task_id}"
     rolling = (
         last_metric.get("rolling_mean")
         or last_metric.get("final_rolling_mean")
     )
-    return {
+    out = {
         "task_id": task_id,
+        "seed": seed,
         "elapsed_s": round(dt, 1),
         "episode": last_metric.get("episode") or last_metric.get("n_episodes"),
         "rolling_mean": rolling,
         "baseline": last_baseline,
         "lift": last_metric.get("lift_over_random"),
     }
+    # Attach the per-rubric breakdown if the done event had it (always
+    # true for the neural policy now, optional for backward-compat).
+    if done_event and "rubric_breakdown" in done_event:
+        out["rubric_breakdown"] = done_event["rubric_breakdown"]
+    return out
 
 
 async def main() -> int:

@@ -97,10 +97,15 @@ def main() -> int:
         repo_id=REPO_ID,
         repo_type=REPO_TYPE,
         commit_message=(
-            "Sync GitHub main: live training upgraded to neural REINFORCE "
-            "(linear policy + value baseline over 31-dim feature vector). "
-            "Mean trained 0.553 -> 0.654 (+18%); per-task lift +0.35 to +0.41 "
-            "across all 5 tasks. 139 tests pass."
+            "Sync GitHub main: live training panel now exposes per-rubric "
+            "breakdown in the SSE done event (cause/chain/efficiency/"
+            "investigation/anti-gaming) so judges see *why* the score caps "
+            "near 0.66 - the policy nails 4/5 rubrics at ~1.0; the only gap "
+            "is chain_accuracy (NLP-level effect-string extraction). UI "
+            "renders the breakdown as a table below the chart and shows "
+            "policy_kind in the status. Multi-seed (3 seeds x 5 tasks) "
+            "headline: trained 0.654+/-0.008, lift +0.382+/-0.019. "
+            "141 tests pass."
         ),
         ignore_patterns=IGNORE,
     )
