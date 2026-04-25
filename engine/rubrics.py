@@ -195,3 +195,33 @@ POSTMORTEM_RUBRICS = RubricSet([
     ),
 ])
 """Default rubric set for PostmortemEnv terminal scoring."""
+
+RUBRIC_ANTI_GAMING_NOTES = {
+    "cause_correctness": (
+        "Cannot be gamed by guessing: wrong hypotheses trigger -0.12 per attempt "
+        "in the reward_calculator and -0.20 in the anti_gaming rubric. "
+        "An agent that brute-forces causes will score 0.0 here while accumulating "
+        "heavy anti_gaming penalties."
+    ),
+    "chain_accuracy": (
+        "Uses Jaccard similarity on directed node+edge sets, not substring matching. "
+        "Submitting a superset of the true chain does not yield full marks — "
+        "precision and recall are both required."
+    ),
+    "efficiency": (
+        "Rewards solving in fewer steps. An agent that finds the correct cause "
+        "after 38 of 40 allowed steps scores near 0 on this rubric even with "
+        "perfect cause_correctness. Forces the optimizer toward targeted querying."
+    ),
+    "investigation_quality": (
+        "Rewards both fact coverage (breadth) and action-type diversity. "
+        "An agent that only calls query_logs will score 0 on diversity regardless "
+        "of how many facts it finds."
+    ),
+    "anti_gaming": (
+        "Independent of all terminal rubrics. Repeated (service, keyword) pairs "
+        "trigger escalating penalties before the terminal score is computed. "
+        "This signal reaches the optimizer during GRPO's per-step reward, "
+        "not just at episode end."
+    ),
+}

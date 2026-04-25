@@ -639,11 +639,236 @@ def evaluate_agents(n_seeds=10):
 # Phase 5: Plot Reward Curves
 # =====================================================================
 
+def evaluate_trained_model(model_name: str, n_seeds: int = 10) -> dict:
+    """
+    Run the trained LLM against the live environment and record per-episode scores.
+    Returns a results dict compatible with the existing evaluation_results.json format.
+    """
+    try:
+        from transformers import AutoTokenizer, AutoModelForCausalLM
+        import torch
+    except ImportError:
+        print("transformers not installed. Skipping trained model evaluation.")
+        return {}
+
+    from engine.environment import PostmortemEnvironment
+    from models.action import Action, ActionType
+    from data.seed_generator import generate_scenario
+
+    tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
+    if tokenizer.pad_token is None:
+        tokenizer.pad_token = tokenizer.eos_token
+
+    model = AutoModelForCausalLM.from_pretrained(
+        model_name,
+        torch_dtype="auto",
+        device_map="auto" if __import__("torch").cuda.is_available() else None,
+        trust_remote_code=True,
+    )
+    model.eval()
+
+    env = PostmortemEnvironment()
+    results = {"trained": []}
+
+    for difficulty in ["easy", "medium", "hard"]:
+        for i in range(n_seeds):
+            seed = random.Random(2000 + i).randint(0, 2**31)
+            scenario = generate_scenario(seed, difficulty)
+            obs_dict = _reset_with_scenario(env, scenario)
+            episode_rewards = []
+
+            for _ in range(scenario.get("max_steps", 40)):
+                obs_text = _format_obs_compact(obs_dict)
+                messages = [
+                    {"role": "system", "content": SYSTEM_PROMPT},
+                    {"role": "user", "content": obs_text},
+                ]
+                try:
+                    prompt = tokenizer.apply_chat_template(
+                        messages, tokenize=False, add_generation_prompt=True
+                    )
+                except Exception:
+                    prompt = "[INST] " + SYSTEM_PROMPT + "\n" + obs_text + " [/INST]"
+
+                inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
+                with __import__("torch").no_grad():
+                    output_ids = model.generate(
+                        **inputs,
+                        max_new_tokens=128,
+                        do_sample=False,
+                        pad_token_id=tokenizer.eos_token_id,
+                    )
+                text = tokenizer.decode(
+                    output_ids[0][inputs["input_ids"].shape[1]:], skip_special_tokens=True
+                )
+
+                # Parse JSON action from model output
+                try:
+                    start = text.find("{")
+                    end = text.rfind("}") + 1
+                    action_dict = json.loads(text[start:end]) if start >= 0 and end > start else {}
+                    action_type = action_dict.get("action_type", "submit")
+                    action = Action(
+                        action_type=action_type,
+                        service=action_dict.get("service"),
+                        keyword=action_dict.get("keyword"),
+                        commit_hash=action_dict.get("commit_hash"),
+                        trace_id=action_dict.get("trace_id"),
+                        cause_entity_id=action_dict.get("cause_entity_id"),
+                        final_cause=action_dict.get("final_cause"),
+                        final_chain=action_dict.get("final_chain"),
+                        chain=action_dict.get("chain"),
+                    )
+                    obs = env.step(action)
+                    episode_rewards.append(obs.reward)
+                    obs_dict = obs.model_dump()
+                    if obs.done:
+                        break
+                except Exception:
+                    # Force submit on bad parse
+                    obs = env.step(Action(
+                        action_type=ActionType.SUBMIT,
+                        final_cause="unknown",
+                        final_chain=[{"service": "data", "effect": "unknown"}],
+                    ))
+                    episode_rewards.append(obs.reward)
+                    break
+
+            score = env.state.final_score or 0.01
+            results["trained"].append({
+                "difficulty": difficulty,
+                "score": score,
+                "rewards": episode_rewards,
+                "n_steps": len(episode_rewards),
+            })
+
+    # Merge into existing evaluation_results.json
+    out_dir = Path("training_data")
+    eval_path = out_dir / "evaluation_results.json"
+    if eval_path.exists():
+        with open(eval_path) as f:
+            existing = json.load(f)
+        existing.update(results)
+        with open(eval_path, "w") as f:
+            json.dump(existing, f, indent=2)
+    else:
+        with open(out_dir / "evaluation_results.json", "w") as f:
+            json.dump(results, f, indent=2)
+
+    scores = [r["score"] for r in results["trained"]]
+    print("Trained model mean score: %.3f" % (sum(scores) / len(scores)))
+    return results
+
+
+def collect_trace(model_name: str, task_id: str = "task1_recent_deploy") -> str:
+    """
+    Run one episode with the trained model and format a readable step trace.
+    Output can be pasted directly into the README comparison block.
+    """
+    try:
+        from transformers import AutoTokenizer, AutoModelForCausalLM
+        import torch
+    except ImportError:
+        return "transformers not installed — cannot collect trace."
+
+    from engine.environment import PostmortemEnvironment
+    from models.action import Action, ActionType
+    from data.seed_generator import generate_scenario
+
+    # Use seed 42 for reproducibility — same seed every run
+    scenario = generate_scenario(seed=42, difficulty="easy")
+
+    tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
+    if tokenizer.pad_token is None:
+        tokenizer.pad_token = tokenizer.eos_token
+    model = AutoModelForCausalLM.from_pretrained(
+        model_name, torch_dtype="auto",
+        device_map="auto" if torch.cuda.is_available() else None,
+        trust_remote_code=True,
+    )
+    model.eval()
+
+    env = PostmortemEnvironment()
+    obs_dict = _reset_with_scenario(env, scenario)
+    lines = []
+    step = 0
+
+    for _ in range(scenario.get("max_steps", 40)):
+        step += 1
+        obs_text = _format_obs_compact(obs_dict)
+        messages = [
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": obs_text},
+        ]
+        try:
+            prompt = tokenizer.apply_chat_template(
+                messages, tokenize=False, add_generation_prompt=True
+            )
+        except Exception:
+            prompt = "[INST] " + SYSTEM_PROMPT + "\n" + obs_text + " [/INST]"
+
+        inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
+        with torch.no_grad():
+            output_ids = model.generate(
+                **inputs, max_new_tokens=128, do_sample=False,
+                pad_token_id=tokenizer.eos_token_id,
+            )
+        text = tokenizer.decode(
+            output_ids[0][inputs["input_ids"].shape[1]:], skip_special_tokens=True
+        )
+
+        try:
+            start = text.find("{")
+            end = text.rfind("}") + 1
+            action_dict = json.loads(text[start:end]) if start >= 0 and end > start else {}
+            action_type = action_dict.get("action_type", "submit")
+            action = Action(
+                action_type=action_type,
+                service=action_dict.get("service"),
+                keyword=action_dict.get("keyword"),
+                commit_hash=action_dict.get("commit_hash"),
+                trace_id=action_dict.get("trace_id"),
+                cause_entity_id=action_dict.get("cause_entity_id"),
+                final_cause=action_dict.get("final_cause"),
+                final_chain=action_dict.get("final_chain"),
+                chain=action_dict.get("chain"),
+            )
+            obs = env.step(action)
+            reward = obs.reward
+            obs_dict = obs.model_dump()
+
+            # Format the trace line
+            detail = action_dict.get("service", action_dict.get("commit_hash", action_dict.get("trace_id", "")))
+            kw = action_dict.get("keyword", "")
+            parts = [action_type]
+            if detail:
+                parts.append(detail)
+            if kw:
+                parts.append('"%s"' % kw)
+            lines.append("%2d  %-14s r=%+.3f" % (step, " ".join(parts)[:38], reward))
+
+            if obs.done:
+                break
+        except Exception as exc:
+            lines.append("%2d  [parse error: %s]" % (step, str(exc)[:40]))
+            break
+
+    final_score = env.state.final_score or 0.0
+    header = "TRAINED MODEL (final_score = %.3f, %d steps)" % (final_score, step)
+    trace = header + "\n" + "-" * len(header) + "\n" + "\n".join(lines)
+
+    out_path = Path("training_data") / "trained_agent_trace.txt"
+    out_path.parent.mkdir(exist_ok=True)
+    out_path.write_text(trace)
+    print("Trace saved to %s" % out_path)
+    print(trace)
+    return trace
+
+
 def plot_rewards():
-    """Generate reward curve plots showing training progress."""
+    """Generate reward curve plots comparing random, trained, and oracle agents."""
     out_dir = Path("training_data")
 
-    # Try matplotlib
     try:
         import matplotlib
         matplotlib.use("Agg")
@@ -651,9 +876,7 @@ def plot_rewards():
         HAS_MPL = True
     except ImportError:
         HAS_MPL = False
-        print("matplotlib not available. Generating ASCII charts instead.")
 
-    # Load evaluation results
     eval_path = out_dir / "evaluation_results.json"
     if not eval_path.exists():
         print("No evaluation results found. Run 'python train.py evaluate' first.")
@@ -662,59 +885,96 @@ def plot_rewards():
     with open(eval_path) as f:
         results = json.load(f)
 
-    if HAS_MPL:
-        fig, axes = plt.subplots(1, 3, figsize=(18, 6))
-        fig.suptitle("PostmortemEnv - Agent Performance Comparison", fontsize=16, fontweight="bold")
+    # Define agents present in results — always include random + oracle,
+    # add trained only if it was evaluated.
+    agent_styles = {
+        "random":  {"label": "Random baseline (%.3f)" % _mean_score(results.get("random", [])),  "color": "coral",     "linestyle": "--"},
+        "trained": {"label": "Trained / GRPO (%.3f)"  % _mean_score(results.get("trained", [])), "color": "mediumseagreen", "linestyle": "-"},
+        "oracle":  {"label": "Oracle upper bound (%.3f)" % _mean_score(results.get("oracle", [])), "color": "steelblue", "linestyle": "-"},
+    }
 
-        # Plot 1: Score distribution by agent
-        ax = axes[0]
-        random_scores = [r["score"] for r in results["random"]]
-        oracle_scores = [r["score"] for r in results["oracle"]]
-        ax.boxplot([random_scores, oracle_scores], tick_labels=["Random", "Oracle"])
-        ax.set_ylabel("Final Score")
-        ax.set_title("Score Distribution")
-        ax.axhline(y=0.5, color="red", linestyle="--", alpha=0.5, label="Pass Threshold")
-        ax.legend()
+    if not HAS_MPL:
+        for name, style in agent_styles.items():
+            data = results.get(name, [])
+            if data:
+                m = _mean_score(data)
+                print("  %-10s: " % name + "#" * int(m * 50) + " %.3f" % m)
+        return
 
-        # Plot 2: Scores by difficulty
-        ax = axes[1]
-        for diff_idx, diff in enumerate(["easy", "medium", "hard"]):
-            r_scores = [r["score"] for r in results["random"] if r["difficulty"] == diff]
-            o_scores = [r["score"] for r in results["oracle"] if r["difficulty"] == diff]
-            x = diff_idx
-            ax.bar(x - 0.15, sum(r_scores) / max(len(r_scores), 1), 0.3, label="Random" if diff_idx == 0 else "", color="coral", alpha=0.7)
-            ax.bar(x + 0.15, sum(o_scores) / max(len(o_scores), 1), 0.3, label="Oracle" if diff_idx == 0 else "", color="steelblue", alpha=0.7)
-        ax.set_xticks([0, 1, 2])
-        ax.set_xticklabels(["Easy", "Medium", "Hard"])
-        ax.set_ylabel("Mean Score")
-        ax.set_title("Performance by Difficulty")
-        ax.legend()
+    fig, axes = plt.subplots(1, 3, figsize=(18, 6))
+    fig.suptitle(
+        "PostmortemEnv — Agent Performance Across 10 Seeds x 3 Difficulties",
+        fontsize=14, fontweight="bold"
+    )
 
-        # Plot 3: Cumulative reward per episode step
-        ax = axes[2]
-        random_rewards_avg = _average_rewards(results["random"])
-        oracle_rewards_avg = _average_rewards(results["oracle"])
-        ax.plot(range(len(random_rewards_avg)), random_rewards_avg, label="Random", color="coral", linewidth=2)
-        ax.plot(range(len(oracle_rewards_avg)), oracle_rewards_avg, label="Oracle", color="steelblue", linewidth=2)
-        ax.set_xlabel("Step")
-        ax.set_ylabel("Cumulative Reward")
-        ax.set_title("Cumulative Reward per Step")
-        ax.legend()
+    # Plot 1: Mean score per agent (bar chart)
+    ax = axes[0]
+    names = [n for n in ["random", "trained", "oracle"] if results.get(n)]
+    means = [_mean_score(results[n]) for n in names]
+    colors = [agent_styles[n]["color"] for n in names]
+    bars = ax.bar(names, means, color=colors, alpha=0.85)
+    ax.set_ylim(0, 1.05)
+    ax.set_ylabel("Mean Final Score (0-1)")
+    ax.set_title("Overall Mean Score by Agent")
+    ax.axhline(y=_mean_score(results.get("random", [])), color="coral", linestyle="--", alpha=0.4)
+    for bar, mean in zip(bars, means):
+        ax.text(bar.get_x() + bar.get_width() / 2, mean + 0.01, "%.3f" % mean,
+                ha="center", va="bottom", fontsize=10, fontweight="bold")
 
-        plt.tight_layout()
-        plot_path = out_dir / "reward_curves.png"
-        plt.savefig(plot_path, dpi=150, bbox_inches="tight")
-        print("Saved reward curves to %s" % plot_path)
-        plt.close()
-    else:
-        # ASCII fallback
-        random_scores = [r["score"] for r in results["random"]]
-        oracle_scores = [r["score"] for r in results["oracle"]]
-        r_mean = sum(random_scores) / len(random_scores)
-        o_mean = sum(oracle_scores) / len(oracle_scores)
-        print("\n  Random:  " + "#" * int(r_mean * 50) + " %.3f" % r_mean)
-        print("  Oracle:  " + "#" * int(o_mean * 50) + " %.3f" % o_mean)
-        print("  Gap:     %.3f" % (o_mean - r_mean))
+    # Plot 2: Score by difficulty
+    ax = axes[1]
+    difficulties = ["easy", "medium", "hard"]
+    x = range(len(difficulties))
+    agent_list = [n for n in ["random", "trained", "oracle"] if results.get(n)]
+    width = 0.8 / len(agent_list)
+    for idx, agent_name in enumerate(agent_list):
+        diff_means = []
+        for diff in difficulties:
+            scores = [r["score"] for r in results[agent_name] if r["difficulty"] == diff]
+            diff_means.append(sum(scores) / len(scores) if scores else 0.0)
+        offset = (idx - len(agent_list) / 2 + 0.5) * width
+        ax.bar([xi + offset for xi in x], diff_means, width * 0.9,
+               label=agent_name.capitalize(), color=agent_styles[agent_name]["color"], alpha=0.85)
+    ax.set_xticks(list(x))
+    ax.set_xticklabels(["Easy", "Medium", "Hard"])
+    ax.set_ylabel("Mean Score")
+    ax.set_title("Score by Difficulty")
+    ax.set_ylim(0, 1.05)
+    ax.legend()
+
+    # Plot 3: Cumulative reward per step (line chart)
+    ax = axes[2]
+    for agent_name in ["random", "trained", "oracle"]:
+        data = results.get(agent_name, [])
+        if not data:
+            continue
+        cum_avg = _average_rewards(data)
+        style = agent_styles[agent_name]
+        ax.plot(
+            range(len(cum_avg)), cum_avg,
+            label=style["label"],
+            color=style["color"],
+            linestyle=style["linestyle"],
+            linewidth=2,
+        )
+    ax.set_xlabel("Step within episode")
+    ax.set_ylabel("Mean cumulative reward")
+    ax.set_title("Cumulative Reward per Step")
+    ax.legend(fontsize=8)
+
+    plt.tight_layout()
+    plot_path = out_dir / "reward_curves.png"
+    plt.savefig(plot_path, dpi=150, bbox_inches="tight")
+    print("Reward curves saved to %s" % plot_path)
+    plt.close()
+
+
+def _mean_score(agent_results: list) -> float:
+    """Helper: mean final score for a list of episode result dicts."""
+    if not agent_results:
+        return 0.0
+    scores = [r["score"] for r in agent_results]
+    return sum(scores) / len(scores)
 
 
 def _average_rewards(agent_results):
@@ -782,9 +1042,14 @@ def main():
     # Evaluate
     p_eval = sub.add_parser("evaluate", help="Evaluate random vs oracle agents")
     p_eval.add_argument("--n-seeds", type=int, default=10)
+    p_eval.add_argument("--model", default=None, help="Path to trained model for evaluation")
 
     # Plot
     sub.add_parser("plot", help="Plot reward curves")
+
+    # Trace
+    p_trace = sub.add_parser("trace", help="Collect a single episode trace from a trained model")
+    p_trace.add_argument("--model", required=True, help="Path to trained model")
 
     args = parser.parse_args()
 
@@ -796,13 +1061,19 @@ def main():
         run_grpo(args.model, args.output, args.episodes)
     elif args.command == "evaluate":
         evaluate_agents(args.n_seeds)
+        if hasattr(args, "model") and args.model:
+            evaluate_trained_model(args.model, args.n_seeds)
     elif args.command == "plot":
         plot_rewards()
+    elif args.command == "trace":
+        collect_trace(args.model)
     else:
         parser.print_help()
         print("\nQuickstart:")
         print("  python train.py collect --n-seeds 20")
         print("  python train.py evaluate --n-seeds 10")
+        print("  python train.py evaluate --n-seeds 10 --model ./grpo_output")
+        print("  python train.py trace --model ./grpo_output")
         print("  python train.py plot")
         print("  python train.py sft --model meta-llama/Llama-3.2-1B-Instruct")
         print("  python train.py grpo --model ./sft_output")
