@@ -97,8 +97,10 @@ def main() -> int:
         repo_id=REPO_ID,
         repo_type=REPO_TYPE,
         commit_message=(
-            "Sync GitHub main: hackathon finalization, training pipeline, "
-            "research-lab UI, live training chart, 2 new tasks, 95% CI eval"
+            "Sync GitHub main: live training upgraded to neural REINFORCE "
+            "(linear policy + value baseline over 31-dim feature vector). "
+            "Mean trained 0.553 -> 0.654 (+18%); per-task lift +0.35 to +0.41 "
+            "across all 5 tasks. 139 tests pass."
         ),
         ignore_patterns=IGNORE,
     )

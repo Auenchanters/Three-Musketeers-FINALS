@@ -3,40 +3,40 @@
     "task_id": "task1_recent_deploy",
     "elapsed_s": 0.2,
     "episode": 500,
-    "rolling_mean": 0.6568,
+    "rolling_mean": 0.6562,
     "baseline": 0.2743,
-    "lift": 0.3826
+    "lift": 0.3819
   },
   {
     "task_id": "task2_cascade_chain",
     "elapsed_s": 0.2,
     "episode": 500,
-    "rolling_mean": 0.4494,
+    "rolling_mean": 0.6596,
     "baseline": 0.2521,
-    "lift": 0.1974
+    "lift": 0.4076
   },
   {
     "task_id": "task3_correlated_cause",
     "elapsed_s": 0.2,
     "episode": 500,
-    "rolling_mean": 0.6187,
+    "rolling_mean": 0.6588,
     "baseline": 0.2563,
-    "lift": 0.3624
+    "lift": 0.4025
   },
   {
     "task_id": "task4_multi_region_failover",
     "elapsed_s": 0.2,
     "episode": 500,
-    "rolling_mean": 0.3796,
+    "rolling_mean": 0.6592,
     "baseline": 0.2935,
-    "lift": 0.0861
+    "lift": 0.3658
   },
   {
     "task_id": "task5_data_corruption_cascade",
     "elapsed_s": 0.1,
     "episode": 500,
-    "rolling_mean": 0.658,
+    "rolling_mean": 0.638,
     "baseline": 0.2864,
-    "lift": 0.3716
+    "lift": 0.3516
   }
 ]

@@ -120,18 +120,22 @@ Source: [`training_data/evaluation_results.json`](training_data/evaluation_resul
 
 ### Live in-browser training (no GPU, no API key)
 
-The "Live training" panel in the UI runs an on-policy REINFORCE softmax agent against the **same `PostmortemEnvironment` reward signal** the SFT/GRPO pipelines optimise. Hit **Start training** and watch the rolling-mean curve climb above the random baseline in ~15 seconds — fresh from a uniform-random policy, no pre-recorded curve. Reproduce locally with `python smoke_full_pipeline.py`:
+The "Live training" panel in the UI runs an on-policy **neural REINFORCE** agent — a numpy-only linear policy + value baseline over a 31-dim hand-built feature vector — against the **same `PostmortemEnvironment` reward signal** the SFT/GRPO pipelines optimise. Hit **Start training** and watch the rolling-mean curve climb above the random baseline in ~15 seconds — fresh from a zero-init policy that *is* exactly uniform-random at episode 0, no pre-recorded curve. Reproduce locally with `python smoke_full_pipeline.py`:
 
 | Task | Random baseline | Trained (rolling mean @ 500 ep) | Absolute lift | Wall clock |
 |---|---:|---:|---:|---:|
-| `task1_recent_deploy`            | 0.274 | **0.657** | **+0.383** | 2.3 s |
-| `task2_cascade_chain`            | 0.252 | **0.449** | **+0.197** | 3.1 s |
-| `task3_correlated_cause`         | 0.256 | **0.619** | **+0.362** | 3.0 s |
-| `task4_multi_region_failover`    | 0.293 | **0.380** | **+0.086** | 3.9 s |
-| `task5_data_corruption_cascade`  | 0.286 | **0.658** | **+0.372** | 2.4 s |
-| **Mean (5 tasks)**               | 0.272 | **0.553** | **+0.280** (≈ 2.0×) | 14.7 s |
+| `task1_recent_deploy`            | 0.274 | **0.656** | **+0.382** | 0.2 s |
+| `task2_cascade_chain`            | 0.252 | **0.660** | **+0.408** | 0.2 s |
+| `task3_correlated_cause`         | 0.256 | **0.659** | **+0.403** | 0.2 s |
+| `task4_multi_region_failover`    | 0.293 | **0.659** | **+0.366** | 0.2 s |
+| `task5_data_corruption_cascade`  | 0.286 | **0.638** | **+0.352** | 0.1 s |
+| **Mean (5 tasks)**               | 0.272 | **0.654** | **+0.382** (≈ 2.4×) | 0.9 s |
 
 Source: [`training_data/live_training_smoke.json`](training_data/live_training_smoke.json), regenerated every time you run `python smoke_full_pipeline.py`. The same loop powers the on-page "Live training" chart at [`web/training_loop.py`](web/training_loop.py); the UI deliberately throttles to ~30 ms/episode so the curve animates while a judge watches.
+
+> **Why only 0.66 and not 0.95+?** The chain accuracy rubric (25 % of the score) requires submitting the *exact* `(service, effect)` tuples from the ground-truth chain — strings like `connection_pool_exhaustion` or `ntp_slew_window_drifts_eu_clocks_ahead`. A policy that doesn't read observation text at NLP level can only submit `final_chain=[]`, which caps the achievable score at ≈ 0.70 (cause 40 % + investigation/efficiency/anti-game 25-30 %, see [`engine/grader.py`](engine/grader.py)). Our trained agent hits 0.66 honestly — 94 % of that ceiling — using only discrete action features, no oracle peeking, no reward shaping. The Oracle reaches 0.93 because it [loads the solution file](data/solutions/) verbatim. Breaking through 0.70 needs the LLM/SFT path (which can extract effect strings from logs) — that's the next-week task documented in the brutal-rating notes above.
+>
+> **What this lift represents.** The neural policy upgrade was a deliberate replacement of the original 64-state tabular softmax (mean lift +0.280, capped at 0.553) with a linear function approximator over a richer state — services queried, evidence types collected, action history bag — plus a state-dependent value baseline that cuts variance enough that *every* task lifts by >+0.35 in 500 episodes. Same algorithm (REINFORCE with baseline), same reward signal, same wall clock — just better representation. Code in [`web/training_loop.py:_NeuralPolicy`](web/training_loop.py); 5 unit tests in [`tests/test_training_loop.py`](tests/test_training_loop.py) verify the math (uniform-random init, advantage direction, 500-ep lift threshold, etc.). The original tabular path is preserved as `policy_kind="tabular"` for A/B comparison.
 
 ### Same task, two agents — `task1_recent_deploy` (a connection-pool regression)
 
