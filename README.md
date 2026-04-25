@@ -213,6 +213,44 @@ python train.py grpo --model ./sft_output     # stretch — online RL on env rew
 
 The notebook clones from GitHub (`https://github.com/Auenchanters/Three-Musketeers-FINALS.git`) and runs the same `train.py full` pipeline on a T4. The script form lives at [`train_notebook.py`](train_notebook.py) for diff-friendly review.
 
+### One-click on Hugging Face Jobs (the run that produced the README numbers)
+
+The Qwen2.5-3B-Instruct adapter row in the table above is the *literal* output of:
+
+```bash
+hf jobs uv run \
+  --flavor l4x1 \
+  --secrets HF_TOKEN \
+  -e BASE_MODEL=Qwen/Qwen2.5-3B-Instruct \
+  -e EPOCHS=6 -e MAX_SEQ=1280 \
+  -e UPLOAD_REPO=<your-namespace>/postmortemenv-qwen3b-full \
+  -e EVAL_BASE_TOO=1 -e SMOKE=0 \
+  https://huggingface.co/spaces/Auenchanters/postmortemenv/raw/main/hf_job_train.py
+```
+
+Wall-clock: **24 min on a single L4** (collect 60 demos → eval random+oracle → SFT 90 steps → eval base+trained → upload everything to the model repo). Cost: ~$0.30. The job produces:
+
+| Artifact | What it is | Where it lands |
+|---|---|---|
+| `adapter_model.safetensors` + `adapter_config.json` | the LoRA adapter (8 MB) | repo root |
+| `sft_metrics.json` | per-step loss + token-accuracy (11 entries, step 1 → 90) | repo root |
+| `training_data/evaluation_results.json` | random / base / trained / oracle, per difficulty | `training_data/` |
+| `training_data/agent_comparison.png` | the comparison chart | `training_data/` |
+| `checkpoint-50/` and `checkpoint-90/` | resumable mid- and end-training snapshots | sub-folders |
+
+Live artefact: [`Auenchanters/postmortemenv-qwen3b-full`](https://huggingface.co/Auenchanters/postmortemenv-qwen3b-full). The script is also linked from the Space at `/raw/main/hf_job_train.py` so judges can re-run the same training without ever cloning the repo locally.
+
+**Headline SFT numbers** (from [`sft_metrics.json`](https://huggingface.co/Auenchanters/postmortemenv-qwen3b-full/blob/main/sft_metrics.json)):
+
+| Step | Epoch | Loss | Mean token accuracy |
+|----:|----:|----:|----:|
+|  1 | 0.07 | 1.3707 | 76.5% |
+| 30 | 2.00 | 1.1755 | 76.8% |
+| 50 | 3.33 | 1.0734 | 77.5% |
+| 90 | 6.00 | **1.0276** | **78.1%** |
+
+Loss drops a clean ~25%, token accuracy ticks up ~1.6 pp — the SFT objective is genuinely converging. The next experiment (more demos + GRPO on top) is the one we'd run if we had another GPU-day, and the *exact same script* is the launch point for it (just bump `COLLECT_SEEDS=80` and append `-e GRPO=1`).
+
 ## Deploy your own
 
 ```bash
