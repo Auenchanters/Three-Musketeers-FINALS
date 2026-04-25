@@ -1,0 +1,37 @@
+{
+  "task_id": "task4_multi_region_failover",
+  "optimal_savings_score": 0.97,
+  "ground_truth": {
+    "cause": "commit-autheu-jwt-skew+infra-mr-002",
+    "cause_type": "correlated",
+    "contributing_causes": ["commit-autheu-jwt-skew", "infra-mr-002", "infra-mr-001"],
+    "chain": [
+      {"service": "clock-sync", "effect": "ntp_slew_window_drifts_eu_clocks_ahead"},
+      {"service": "auth-eu", "effect": "tightened_skew_tolerance_rejects_us_tokens"},
+      {"service": "auth-us", "effect": "federation_round_trip_returns_401"},
+      {"service": "frontend-us", "effect": "intermittent_token_invalid_user_facing"}
+    ]
+  },
+  "optimal_action_sequence": [
+    {"action_type": "query_logs", "service": "frontend-us", "keyword": "401", "reason": "Pin down the user-visible signal: hourly 90s 401 bursts."},
+    {"action_type": "fetch_trace", "trace_id": "trace-mr-001", "reason": "Trace shows the 401 originates at auth-eu (federation), not auth-us itself."},
+    {"action_type": "query_logs", "service": "auth-eu", "keyword": "SkewReject", "reason": "Surface the clock-skew rejection burst — same hourly pattern."},
+    {"action_type": "diff_commit", "commit_hash": "commit-autheu-jwt-skew", "reason": "The auth-eu commit that reduced JWT skew tolerance from 300s to 5s is the compliance-audit change matching the symptom."},
+    {"action_type": "query_logs", "service": "clock-sync", "keyword": "slew", "reason": "Confirm the NTP slew window — 6-14s drift on eu-west once per hour, ~90s long."},
+    {"action_type": "inspect_infra", "event_id": "infra-mr-002", "reason": "NTP slew event explains why drift exceeds the new 5s tolerance during a 90s window."},
+    {"action_type": "inspect_infra", "event_id": "infra-mr-001", "reason": "Verify DNS TTL refresh is a coincident cycle, NOT the cause — same hourly cadence is a red herring."},
+    {"action_type": "hypothesize", "cause_entity_id": "commit-autheu-jwt-skew", "reason": "Probe: is the commit alone the cause? Expect no — needs the slew to fire."},
+    {"action_type": "explain_chain", "chain": [
+      {"service": "clock-sync", "effect": "ntp_slew_window_drifts_eu_clocks_ahead"},
+      {"service": "auth-eu", "effect": "tightened_skew_tolerance_rejects_us_tokens"},
+      {"service": "auth-us", "effect": "federation_round_trip_returns_401"},
+      {"service": "frontend-us", "effect": "intermittent_token_invalid_user_facing"}
+    ], "reason": "Reconstruct the four-step chain from clock drift to user-facing 401."},
+    {"action_type": "submit", "final_cause": "commit-autheu-jwt-skew+infra-mr-002", "final_chain": [
+      {"service": "clock-sync", "effect": "ntp_slew_window_drifts_eu_clocks_ahead"},
+      {"service": "auth-eu", "effect": "tightened_skew_tolerance_rejects_us_tokens"},
+      {"service": "auth-us", "effect": "federation_round_trip_returns_401"},
+      {"service": "frontend-us", "effect": "intermittent_token_invalid_user_facing"}
+    ], "reason": "Correlated cause: tightened JWT skew tolerance combined with the routine hourly NTP slew. DNS TTL refresh is a red herring (coincident timing, no causal role)."}
+  ]
+}

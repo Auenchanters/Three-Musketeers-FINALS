@@ -262,3 +262,42 @@ class TestFinalScore:
         )
         # Should get partial credit (0.5 * 0.5 = 0.25 from cause)
         assert score > 0.3
+
+
+class TestAntiGamingHypothesisAttempts:
+    """Brutal-rating R5 fix: ``hypothesis_attempts > 3`` must penalise.
+
+    The env now passes ``_hypothesis_call_count`` (which keeps incrementing
+    past the 3-attempt cap) into the grader, so spamming hypothesize()
+    actually hurts the terminal score.
+    """
+
+    def _baseline_kwargs(self):
+        chain = [{"service": "data", "effect": "crash"}]
+        return dict(
+            submitted_cause="commit-abc",
+            submitted_chain=chain,
+            ground_truth_cause="commit-abc",
+            ground_truth_chain=chain,
+            cause_type="commit",
+            steps_used=5,
+            max_steps=40,
+            n_wrong_hypotheses=0,
+        )
+
+    def test_hypothesis_spam_penalises_score(self):
+        """Score must strictly decrease as hypothesis_attempts goes 3 -> 6."""
+        kw = self._baseline_kwargs()
+        score_clean = Grader.compute_final_score(**kw, hypothesis_attempts=3)
+        score_spam = Grader.compute_final_score(**kw, hypothesis_attempts=6)
+        assert score_spam < score_clean, (
+            "hypothesis_attempts > 3 should reduce the anti_gaming rubric "
+            "and therefore the total score"
+        )
+
+    def test_hypothesis_attempts_3_or_less_is_neutral(self):
+        """The penalty branch only fires when attempts strictly exceed 3."""
+        kw = self._baseline_kwargs()
+        s_2 = Grader.compute_final_score(**kw, hypothesis_attempts=2)
+        s_3 = Grader.compute_final_score(**kw, hypothesis_attempts=3)
+        assert s_2 == s_3

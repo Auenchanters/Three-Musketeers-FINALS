@@ -152,11 +152,21 @@ def _investigation_quality(facts_found: int = 0, total_facts: int = 1,
 
 def _anti_gaming(wrong_hypotheses: int = 0, repeated_queries: int = 0,
                  hypothesis_attempts: int = 0, **_: Any) -> float:
-    """Penalises signs of reward-hacking behaviour."""
+    """Penalises signs of reward-hacking behaviour.
+
+    ``hypothesis_attempts`` is the *total* number of ``hypothesize`` calls
+    the agent made — including attempts that were blocked by the
+    3-per-episode cap. The environment tracks this in
+    ``_hypothesis_call_count`` rather than ``len(_hypotheses_submitted)``
+    so the ``> 3`` branch below is actually reachable (R5 fix from
+    brutal_rating). An agent that spams hypothesize() to brute-force the
+    cause now pays a real penalty here even though the env returns its
+    "limit reached" message after attempt #3.
+    """
     score = 1.0
-    score -= 0.20 * wrong_hypotheses         # −0.20 per wrong guess
-    score -= 0.05 * repeated_queries          # −0.05 per repeated query
-    # Penalise excessive hypothesis attempts even if some are correct
+    score -= 0.20 * wrong_hypotheses         # -0.20 per wrong guess
+    score -= 0.05 * repeated_queries          # -0.05 per repeated query
+    # Penalise excessive hypothesise() spam beyond the 3-attempt cap.
     if hypothesis_attempts > 3:
         score -= 0.10 * (hypothesis_attempts - 3)
     return max(0.0, score)
@@ -221,6 +231,9 @@ RUBRIC_ANTI_GAMING_NOTES = {
     "anti_gaming": (
         "Independent of all terminal rubrics. Repeated (service, keyword) pairs "
         "trigger escalating penalties before the terminal score is computed. "
+        "Hypothesis-spam beyond the 3-attempt cap is also penalised here "
+        "(brutal_rating R5 fix: the env now tracks hypothesize() call count "
+        "even past the cap so this branch is reachable). "
         "This signal reaches the optimizer during GRPO's per-step reward, "
         "not just at episode end."
     ),

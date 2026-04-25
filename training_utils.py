@@ -16,7 +16,9 @@ SYSTEM_PROMPT = (
     "You are an expert SRE investigator. Respond with ONLY a JSON object "
     "containing your next investigation action. Available actions: "
     "query_logs, fetch_trace, diff_commit, inspect_config, inspect_infra, "
-    "hypothesize, explain_chain, submit."
+    "discover_topology, hypothesize, explain_chain, submit. "
+    "Use 'discover_topology' (with optional 'service') to reveal "
+    "dependencies in narrative mode where the graph is initially hidden."
 )
 
 
@@ -109,6 +111,91 @@ def parse_action_json(text: str, fallback: dict[str, Any] | None = None) -> dict
     if not isinstance(parsed, dict) or not parsed.get("action_type"):
         return dict(default)
     return parsed
+
+
+def parse_action_plan(text: str) -> list[dict[str, Any]]:
+    """Parse a completion as a *plan* — a sequence of action dicts.
+
+    Recognised formats (tried in order):
+
+    1. ``[ {action_type: ...}, {action_type: ...}, ... ]`` — a JSON list.
+    2. Multiple ``{...}`` JSON objects separated by whitespace, commas,
+       newlines, or markdown fences. Each object is parsed independently;
+       any object missing ``action_type`` is skipped.
+    3. A single object — degenerate plan of length 1.
+
+    Used by the GRPO ``reward_fn`` to roll the environment forward
+    through the model's planned trajectory and return the *cumulative*
+    episode reward, not just the reward for one action. This addresses
+    the brutal-rating §4 "GRPO only sees per-action reward" concern by
+    aligning the optimisation signal with the deliverable: a complete
+    investigation, not a single move.
+
+    Returns an empty list when nothing can be parsed.
+    """
+    s = (text or "").strip()
+    if not s:
+        return []
+
+    # Strip a single fenced ``` block if present.
+    if s.startswith("```"):
+        first_nl = s.find("\n")
+        last_fence = s.rfind("```")
+        if first_nl != -1 and last_fence > first_nl:
+            s = s[first_nl + 1:last_fence].strip()
+
+    # Try a JSON array first.
+    try:
+        parsed = json.loads(s)
+        if isinstance(parsed, list):
+            return [
+                a for a in parsed
+                if isinstance(a, dict) and a.get("action_type")
+            ]
+        if isinstance(parsed, dict) and parsed.get("action_type"):
+            return [parsed]
+    except json.JSONDecodeError:
+        pass
+
+    # Fall back: scan for top-level ``{...}`` blocks. We track brace depth
+    # so nested objects (e.g. ``"chain": [{...}]``) don't terminate parsing
+    # prematurely. Strings (with escaped chars) are tracked too so a stray
+    # ``}`` inside a string doesn't fool the depth counter.
+    actions: list[dict[str, Any]] = []
+    depth = 0
+    in_str = False
+    esc = False
+    start = -1
+    for i, ch in enumerate(s):
+        if in_str:
+            if esc:
+                esc = False
+            elif ch == "\\":
+                esc = True
+            elif ch == '"':
+                in_str = False
+            continue
+        if ch == '"':
+            in_str = True
+            continue
+        if ch == "{":
+            if depth == 0:
+                start = i
+            depth += 1
+        elif ch == "}":
+            if depth > 0:
+                depth -= 1
+                if depth == 0 and start >= 0:
+                    chunk = s[start:i + 1]
+                    try:
+                        obj = json.loads(chunk)
+                    except json.JSONDecodeError:
+                        obj = None
+                    if isinstance(obj, dict) and obj.get("action_type"):
+                        actions.append(obj)
+                    start = -1
+
+    return actions
 
 
 def action_from_dict(action_dict: dict[str, Any]) -> Action:

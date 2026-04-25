@@ -38,6 +38,18 @@ tasks:
     description: "A deploy and a concurrent infrastructure event combine to cause the outage. Neither alone is sufficient."
     max_steps: 120
 
+  - id: task4_multi_region_failover
+    name: "Multi-Region Failover Clock-Skew"
+    difficulty: hard
+    description: "12 services across 2 regions x 2 AZs. EU auth rejects US-region tokens during a ~90s DNS TTL refresh window — a clock-skew bug interacting with NTP slew."
+    max_steps: 100
+
+  - id: task5_data_corruption_cascade
+    name: "Symptom-Inverted Data Corruption"
+    difficulty: hard
+    description: "Silent data corruption in batch publishes records that fail downstream checksums; latency on the read path masquerades as a network problem. Cause is a checksum-removal commit, not a network event."
+    max_steps: 75
+
 endpoints:
   reset: /reset
   step: /step
