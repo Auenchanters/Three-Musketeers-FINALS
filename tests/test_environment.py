@@ -178,6 +178,26 @@ class TestHypothesize:
         # Even though correct, shouldn't record or score
         assert obs.wrong_hypotheses == 3
 
+    def test_hypothesis_call_count_keeps_climbing_past_cap(self, easy_env):
+        """Brutal-rating R5 fix: the env tracks hypothesize() calls past
+        the 3-attempt cap so the grader's anti_gaming
+        ``hypothesis_attempts > 3`` branch is reachable."""
+        for _ in range(3):
+            easy_env.step(Action(
+                action_type=ActionType.HYPOTHESIZE,
+                cause_entity_id="commit-wrong",
+            ))
+        # Spam two extra blocked attempts
+        for _ in range(2):
+            easy_env.step(Action(
+                action_type=ActionType.HYPOTHESIZE,
+                cause_entity_id="commit-wrong",
+            ))
+        # Internal counter is exposed for tests; it must outpace the recorded
+        # submissions (which are still capped at 3).
+        assert easy_env._hypothesis_call_count == 5
+        assert len(easy_env._hypotheses_submitted) == 3
+
 
 class TestExplainChain:
     def test_perfect_chain(self, easy_env):
@@ -353,3 +373,127 @@ class TestHardTask:
         assert obs.done is True
         state = hard_env.state
         assert state.final_score > 0.5
+
+
+class TestTask4MultiRegionFailover:
+    """Hand-crafted multi-region failover scenario (12 services, 2 regions, 2 AZs).
+
+    Verifies the scenario loads, contains the expected service topology,
+    and that submitting the correlated cause produces a passing score.
+    """
+
+    def test_load_task4(self, env):
+        obs = env.reset(task_id="task4_multi_region_failover")
+        assert obs.max_steps == 120
+        # 12-service architecture (matches the brief)
+        assert len(obs.services) == 12
+        assert "frontend-us" in obs.service_graph
+        assert "auth-eu" in obs.service_graph
+        assert "clock-sync" in obs.service_graph
+
+    def test_task4_correlated_cause(self, env):
+        env.reset(task_id="task4_multi_region_failover")
+        state = env.state
+        assert state.ground_truth_cause_type == "correlated"
+        assert "commit-autheu-jwt-skew" in state.ground_truth_cause
+
+    def test_task4_correct_submission_scores_above_passing(self, env):
+        env.reset(task_id="task4_multi_region_failover")
+        chain = [
+            {"service": "clock-sync", "effect": "ntp_slew_window_drifts_eu_clocks_ahead"},
+            {"service": "auth-eu", "effect": "tightened_skew_tolerance_rejects_us_tokens"},
+            {"service": "auth-us", "effect": "federation_round_trip_returns_401"},
+            {"service": "frontend-us", "effect": "intermittent_token_invalid_user_facing"},
+        ]
+        obs = env.step(Action(
+            action_type=ActionType.SUBMIT,
+            final_cause="commit-autheu-jwt-skew+infra-mr-002",
+            final_chain=chain,
+        ))
+        assert obs.done is True
+        assert env.state.final_score > 0.5
+
+
+class TestTask5DataCorruptionCascade:
+    """Hand-crafted data-corruption cascade (symptom looks like network)."""
+
+    def test_load_task5(self, env):
+        obs = env.reset(task_id="task5_data_corruption_cascade")
+        assert obs.max_steps == 75
+        assert "batch-processor" in obs.service_graph
+        assert "data-store" in obs.service_graph
+
+    def test_task5_root_cause_is_commit(self, env):
+        env.reset(task_id="task5_data_corruption_cascade")
+        state = env.state
+        assert state.ground_truth_cause == "commit-bp-writer-refactor"
+        assert state.ground_truth_cause_type == "commit"
+
+    def test_task5_correct_submission_scores_above_passing(self, env):
+        env.reset(task_id="task5_data_corruption_cascade")
+        chain = [
+            {"service": "batch-processor", "effect": "checksum_verification_removed_in_writer"},
+            {"service": "batch-processor", "effect": "publishes_records_with_silent_corruption"},
+            {"service": "data-store", "effect": "deserialize_retries_then_slow_path_fallback"},
+            {"service": "api", "effect": "data_store_read_latency_climbs"},
+            {"service": "frontend", "effect": "user_visible_latency_p99_4200ms_looks_like_network"},
+        ]
+        obs = env.step(Action(
+            action_type=ActionType.SUBMIT,
+            final_cause="commit-bp-writer-refactor",
+            final_chain=chain,
+        ))
+        assert obs.done is True
+        assert env.state.final_score > 0.5
+
+
+class TestNarrativeMode:
+    """Narrative mode: dependency graph hidden until ``discover_topology``.
+
+    Implements the brutal_rating "real partial observability" item.
+    """
+
+    def test_classic_mode_shows_full_graph(self, env):
+        obs = env.reset(task_id="task1_recent_deploy", narrative_mode=False)
+        assert obs.narrative_mode is False
+        assert len(obs.service_graph) == 4
+
+    def test_narrative_mode_initial_obs_hides_graph(self, env):
+        obs = env.reset(task_id="task1_recent_deploy", narrative_mode=True)
+        assert obs.narrative_mode is True
+        assert obs.service_graph == {}
+
+    def test_discover_topology_reveals_one_service(self, env):
+        env.reset(task_id="task1_recent_deploy", narrative_mode=True)
+        obs = env.step(Action(
+            action_type=ActionType.DISCOVER_TOPOLOGY,
+            service="frontend",
+        ))
+        assert "frontend" in obs.service_graph
+        # Other services still hidden until separately discovered
+        assert "auth" not in obs.service_graph
+        assert "topology revealed" in obs.query_result.lower()
+
+    def test_discover_topology_no_arg_reveals_all(self, env):
+        env.reset(task_id="task1_recent_deploy", narrative_mode=True)
+        obs = env.step(Action(action_type=ActionType.DISCOVER_TOPOLOGY))
+        assert len(obs.service_graph) == 4
+
+    def test_discover_topology_unknown_service_is_invalid(self, env):
+        env.reset(task_id="task1_recent_deploy", narrative_mode=True)
+        obs = env.step(Action(
+            action_type=ActionType.DISCOVER_TOPOLOGY,
+            service="not-a-real-service",
+        ))
+        assert "Unknown service" in obs.message
+
+    def test_discover_topology_in_classic_mode_is_idempotent(self, env):
+        """Classic mode pre-discovers everything; calling discover_topology
+        is well-defined but earns no information-gain reward."""
+        env.reset(task_id="task1_recent_deploy", narrative_mode=False)
+        obs = env.step(Action(
+            action_type=ActionType.DISCOVER_TOPOLOGY,
+            service="frontend",
+        ))
+        assert "already known" in obs.query_result.lower()
+        assert len(obs.service_graph) == 4

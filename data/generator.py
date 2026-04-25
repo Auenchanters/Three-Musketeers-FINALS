@@ -22,16 +22,20 @@ SCENARIO_FILES = {
     "task1_recent_deploy": "task1_recent_deploy.json",
     "task2_cascade_chain": "task2_cascade_chain.json",
     "task3_correlated_cause": "task3_correlated_cause.json",
+    "task4_multi_region_failover": "task4_multi_region_failover.json",
+    "task5_data_corruption_cascade": "task5_data_corruption_cascade.json",
 }
 
 SOLUTION_FILES = {
     "task1_recent_deploy": "task1_solution.json",
     "task2_cascade_chain": "task2_solution.json",
     "task3_correlated_cause": "task3_solution.json",
+    "task4_multi_region_failover": "task4_solution.json",
+    "task5_data_corruption_cascade": "task5_solution.json",
 }
 
 
-@functools.lru_cache(maxsize=8)
+@functools.lru_cache(maxsize=16)
 def _read_json_cached(path_str: str) -> str:
     """Cache the *raw* JSON text for the 3 hand-crafted scenarios + 3
     solutions. Returning text instead of the parsed dict is intentional —

@@ -137,6 +137,20 @@ class PostmortemEnvironment(Environment[Action, Observation, EnvironmentState]):
         self._last_queried_service: Optional[str] = None  # for coherence bonus
         self._action_types_used: Set[str] = set()         # for diversity bonus
         self._repeated_query_count: int = 0               # total repeats
+        # Total number of hypothesize() calls (including ones blocked by the
+        # 3-attempt cap). Tracked separately from ``_hypotheses_submitted``
+        # so the grader's "hypothesis_attempts > 3" anti-gaming penalty can
+        # actually fire — previously the cap kept the recorded count at 3
+        # and the rubric branch was dead code (R5 in brutal_rating).
+        self._hypothesis_call_count: int = 0
+
+        # --- Narrative mode (real partial observability) ---
+        # When enabled, the dependency graph starts hidden and the agent
+        # must issue ``discover_topology`` actions to reveal it. Each call
+        # adds one service (and its outgoing edges) to ``_topology_discovered``;
+        # an empty service argument reveals the whole graph.
+        self._narrative_mode: bool = False
+        self._topology_discovered: Set[str] = set()
 
         self._initialized: bool = False
 
@@ -158,20 +172,32 @@ class PostmortemEnvironment(Environment[Action, Observation, EnvironmentState]):
     # --- reset ---
 
     def reset(self, seed: Optional[int] = None, episode_id: Optional[str] = None,
-              task_id: str = "task1_recent_deploy", **kwargs) -> Observation:
+              task_id: str = "task1_recent_deploy", narrative_mode: bool = False,
+              **kwargs) -> Observation:
         """
         Start a new investigation episode for the given task.
 
         Loads the frozen outage scenario from disk, initializes oracle state,
-        and returns the initial observation with the service graph and task brief.
+        and returns the initial observation with the task brief.
+
+        Parameters
+        ----------
+        narrative_mode : bool, default ``False``
+            When ``True``, the service dependency graph is *hidden* in the
+            initial observation. The agent must issue ``discover_topology``
+            actions to incrementally reveal it. This makes partial
+            observability real (in classic mode the graph is given upfront).
         """
         scenario = load_scenario(task_id)
-        return self.reset_from_scenario(scenario, task_id=task_id)
+        return self.reset_from_scenario(
+            scenario, task_id=task_id, narrative_mode=narrative_mode,
+        )
 
     def reset_from_scenario(
         self,
         scenario: Dict[str, Any],
         task_id: Optional[str] = None,
+        narrative_mode: bool = False,
     ) -> Observation:
         """
         Reset the environment with an externally-supplied scenario dict.
@@ -223,6 +249,17 @@ class PostmortemEnvironment(Environment[Action, Observation, EnvironmentState]):
         self._last_queried_service = None
         self._action_types_used = set()
         self._repeated_query_count = 0
+        self._hypothesis_call_count = 0
+
+        # --- Narrative mode setup ---
+        self._narrative_mode = bool(narrative_mode)
+        # In classic mode the whole graph is "discovered" up front so the
+        # observation matches legacy behaviour bit-for-bit. In narrative
+        # mode nothing is revealed until the agent calls discover_topology.
+        if self._narrative_mode:
+            self._topology_discovered = set()
+        else:
+            self._topology_discovered = set(self._service_graph.keys())
 
         self._initialized = True
         return self._build_observation(reward=0.01, done=False)
@@ -248,6 +285,7 @@ class PostmortemEnvironment(Environment[Action, Observation, EnvironmentState]):
             ActionType.DIFF_COMMIT: self._handle_diff_commit,
             ActionType.INSPECT_CONFIG: self._handle_inspect_config,
             ActionType.INSPECT_INFRA: self._handle_inspect_infra,
+            ActionType.DISCOVER_TOPOLOGY: self._handle_discover_topology,
             ActionType.HYPOTHESIZE: self._handle_hypothesize,
             ActionType.EXPLAIN_CHAIN: self._handle_explain_chain,
             ActionType.SUBMIT: self._handle_submit,
@@ -288,7 +326,7 @@ class PostmortemEnvironment(Environment[Action, Observation, EnvironmentState]):
                     total_facts=len(self._relevant_fact_ids),
                     action_types_used=len(self._action_types_used),
                     repeated_queries=self._repeated_query_count,
-                    hypothesis_attempts=len(self._hypotheses_submitted),
+                    hypothesis_attempts=self._hypothesis_call_count,
                 )
             self._message += " | Query budget exhausted. Episode ended."
 
@@ -615,12 +653,68 @@ class PostmortemEnvironment(Environment[Action, Observation, EnvironmentState]):
 
         return RewardCalculator.query_reward(new_relevant)
 
+    def _handle_discover_topology(self, action: Action) -> Reward:
+        """Reveal a slice of the dependency graph (narrative mode only).
+
+        Behaviour
+        ---------
+        * In *classic* mode (``narrative_mode=False``) the entire graph is
+          visible from step 0. ``discover_topology`` simply returns the
+          (already known) edges for the requested service so the action is
+          still well-defined and tests stay deterministic — but it earns
+          no information-gain reward (everything was already discovered).
+        * In *narrative* mode the graph starts hidden. Each call adds the
+          named service (and its outgoing edges) to ``_topology_discovered``.
+          When ``action.service`` is empty the agent reveals the *entire*
+          graph in one shot — that is intentionally cheap to use and costs
+          a step, so a one-shot reveal trades a turn for full visibility.
+
+        The reward uses :meth:`RewardCalculator.query_reward` with
+        ``n_relevant_facts_found`` set to the number of *newly* revealed
+        services. This cleanly piggy-backs on the existing info-gain
+        accounting without introducing a third reward path.
+        """
+        target = (action.service or "").strip()
+        previously_known = set(self._topology_discovered)
+
+        if target == "":
+            self._topology_discovered.update(self._service_graph.keys())
+        else:
+            if target not in self._service_graph:
+                available = ", ".join(self._service_graph.keys())
+                return RewardCalculator.invalid_action_reward(
+                    f"Unknown service '{target}'. Available: {available}"
+                )
+            self._topology_discovered.add(target)
+
+        newly_revealed = self._topology_discovered - previously_known
+        n_revealed = len(newly_revealed)
+
+        if n_revealed == 0:
+            self._last_query_result = (
+                f"Topology already known for '{target or 'all services'}'. "
+                "No new edges revealed."
+            )
+        else:
+            lines = [f"=== Topology revealed ({n_revealed} new service(s)) ==="]
+            for svc in sorted(newly_revealed):
+                deps = self._service_graph.get(svc, [])
+                deps_str = ", ".join(deps) if deps else "(no upstream deps)"
+                lines.append(f"  {svc} -> [{deps_str}]")
+            self._last_query_result = "\n".join(lines)
+
+        return RewardCalculator.query_reward(n_revealed)
+
     def _handle_hypothesize(self, action: Action) -> Reward:
         """Submit a candidate root cause for feedback (non-terminal).
 
         Anti-gaming: capped at 3 hypothesis attempts per episode.
         Beyond the cap, the agent receives a fixed penalty and is told
-        to investigate more before guessing.
+        to investigate more before guessing. ``_hypothesis_call_count``
+        keeps incrementing past the cap so the terminal grader's
+        ``hypothesis_attempts > 3`` rubric branch is reachable when an
+        agent spams hypothesize() — fixes the dead-code path flagged
+        in brutal_rating R5.
         """
         MAX_HYPOTHESES = 3
 
@@ -629,6 +723,9 @@ class PostmortemEnvironment(Environment[Action, Observation, EnvironmentState]):
             return RewardCalculator.invalid_action_reward(
                 "hypothesize requires a 'cause_entity_id' parameter."
             )
+
+        # Always count the call attempt, even if it gets blocked by the cap.
+        self._hypothesis_call_count += 1
 
         # --- Anti-gaming: enforce hypothesis cap ---
         if len(self._hypotheses_submitted) >= MAX_HYPOTHESES:
@@ -712,7 +809,7 @@ class PostmortemEnvironment(Environment[Action, Observation, EnvironmentState]):
             total_facts=len(self._relevant_fact_ids),
             action_types_used=len(self._action_types_used),
             repeated_queries=self._repeated_query_count,
-            hypothesis_attempts=len(self._hypotheses_submitted),
+            hypothesis_attempts=self._hypothesis_call_count,
         )
 
         self._final_score = result["score"]
@@ -795,12 +892,23 @@ class PostmortemEnvironment(Environment[Action, Observation, EnvironmentState]):
         except (ValueError, TypeError):
             safe_reward = 0.01
 
+        # In narrative mode only the explicitly-discovered services appear
+        # in the observation's service_graph. Classic mode always shows the
+        # full graph (back-compat), because reset() seeds
+        # ``_topology_discovered`` with every service.
+        visible_graph: Dict[str, List[str]] = {
+            svc: list(self._service_graph.get(svc, []))
+            for svc in self._topology_discovered
+            if svc in self._service_graph
+        }
+
         return Observation(
             task_description=self._task_description,
             query_result=self._last_query_result,
             remaining_budget=max(0, self._max_steps - self._steps_taken),
             known_facts=list(self._known_facts),
-            service_graph=self._service_graph,
+            service_graph=visible_graph,
+            narrative_mode=self._narrative_mode,
             services=services,
             incident_window=self._incident_window,
             available_commits=available_commits,

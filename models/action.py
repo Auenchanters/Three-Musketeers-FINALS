@@ -13,6 +13,7 @@ class ActionType(str, Enum):
     DIFF_COMMIT = "diff_commit"
     INSPECT_CONFIG = "inspect_config"
     INSPECT_INFRA = "inspect_infra"
+    DISCOVER_TOPOLOGY = "discover_topology"
     HYPOTHESIZE = "hypothesize"
     EXPLAIN_CHAIN = "explain_chain"
     SUBMIT = "submit"
@@ -30,6 +31,8 @@ class Action(BaseAction):
     - diff_commit: commit_hash
     - inspect_config: config_id
     - inspect_infra: event_id
+    - discover_topology: service (narrative mode only — reveals that
+      service's dependencies; omit ``service`` to reveal everything)
     - hypothesize: cause_entity_id
     - explain_chain: chain (ordered list of {service, effect})
     - submit: final_cause, final_chain

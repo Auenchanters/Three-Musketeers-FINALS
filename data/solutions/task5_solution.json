@@ -1,0 +1,39 @@
+{
+  "task_id": "task5_data_corruption_cascade",
+  "optimal_savings_score": 0.95,
+  "ground_truth": {
+    "cause": "commit-bp-writer-refactor",
+    "cause_type": "commit",
+    "chain": [
+      {"service": "batch-processor", "effect": "checksum_verification_removed_in_writer"},
+      {"service": "batch-processor", "effect": "publishes_records_with_silent_corruption"},
+      {"service": "data-store", "effect": "deserialize_retries_then_slow_path_fallback"},
+      {"service": "api", "effect": "data_store_read_latency_climbs"},
+      {"service": "frontend", "effect": "user_visible_latency_p99_4200ms_looks_like_network"}
+    ]
+  },
+  "optimal_action_sequence": [
+    {"action_type": "query_logs", "service": "frontend", "keyword": "latency", "reason": "Anchor on the user-visible symptom: p99 climbing from 178ms toward 4200ms."},
+    {"action_type": "query_logs", "service": "api", "keyword": "data-store", "reason": "Trace symptom one hop upstream — api's data-store calls are the slow leg, NOT the network."},
+    {"action_type": "fetch_trace", "trace_id": "trace-corr-001", "reason": "Trace span isolates latency to data-store deserialize, with explicit ChecksumMismatchError retries."},
+    {"action_type": "inspect_infra", "event_id": "infra-corr-001", "reason": "Confirm the network team's NULL finding — rules out the 'looks like network' red herring."},
+    {"action_type": "query_logs", "service": "data-store", "keyword": "ChecksumMismatch", "reason": "Surface the real signal: deserialize errors on records published by batch-processor, climbing from 2.1% -> 9.4%."},
+    {"action_type": "query_logs", "service": "batch-processor", "keyword": "deploy", "reason": "Find the recent batch-processor change that correlates in time with the start of the cascade."},
+    {"action_type": "diff_commit", "commit_hash": "commit-bp-writer-refactor", "reason": "The writer refactor removed CRC32 verification — exactly the integrity gate whose absence produces silent corruption downstream."},
+    {"action_type": "hypothesize", "cause_entity_id": "commit-bp-writer-refactor", "reason": "Probe the candidate cause before submission."},
+    {"action_type": "explain_chain", "chain": [
+      {"service": "batch-processor", "effect": "checksum_verification_removed_in_writer"},
+      {"service": "batch-processor", "effect": "publishes_records_with_silent_corruption"},
+      {"service": "data-store", "effect": "deserialize_retries_then_slow_path_fallback"},
+      {"service": "api", "effect": "data_store_read_latency_climbs"},
+      {"service": "frontend", "effect": "user_visible_latency_p99_4200ms_looks_like_network"}
+    ], "reason": "Reconstruct the five-step chain: corruption introduced upstream, manifests as latency two hops downstream, masquerades as a network problem."},
+    {"action_type": "submit", "final_cause": "commit-bp-writer-refactor", "final_chain": [
+      {"service": "batch-processor", "effect": "checksum_verification_removed_in_writer"},
+      {"service": "batch-processor", "effect": "publishes_records_with_silent_corruption"},
+      {"service": "data-store", "effect": "deserialize_retries_then_slow_path_fallback"},
+      {"service": "api", "effect": "data_store_read_latency_climbs"},
+      {"service": "frontend", "effect": "user_visible_latency_p99_4200ms_looks_like_network"}
+    ], "reason": "Symptom-vs-cause inversion: the symptom is latency that looks like a network problem, but the cause is a checksum-removal commit two hops upstream. The 02:48Z rollback confirmed causality (latency normalised within 6 minutes)."}
+  ]
+}

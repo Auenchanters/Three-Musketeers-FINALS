@@ -1,162 +1,411 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="dark">
+<html lang="en" data-theme="light">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="color-scheme" content="dark" />
-  <title>PostmortemEnv — Epistemic RL for Cloud Outages</title>
-  <meta name="description" content="A disciplined live console for PostmortemEnv: watch investigators reason about cloud outages step by step." />
+  <meta name="color-scheme" content="light dark" />
+  <title>PostmortemEnv — An Epistemic RL Benchmark for AI Investigators</title>
+  <meta name="description" content="A reproducible benchmark for AI investigators. Pick a HuggingFace model, run a frozen incident, watch reasoning unfold." />
+  <meta property="og:title" content="PostmortemEnv" />
+  <meta property="og:description" content="An epistemic RL benchmark for AI investigators. PyTorch + HuggingFace." />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Doto:wght@400;700&family=Space+Grotesk:wght@300;400;500;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Source+Serif+4:opsz,wght@8..60,400;8..60,500;8..60,600;8..60,700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/static/style.css" />
-  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23000000'/%3E%3Ccircle cx='16' cy='16' r='5' fill='%23FFFFFF'/%3E%3C/svg%3E" />
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%231A56DB'/%3E%3Ccircle cx='16' cy='16' r='6' fill='%23FFFFFF'/%3E%3C/svg%3E" />
+  <script>
+    // Apply persisted theme synchronously to avoid a flash.
+    (function () {
+      try {
+        var t = localStorage.getItem("pme.theme");
+        if (!t) {
+          t = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+        }
+        document.documentElement.setAttribute("data-theme", t);
+      } catch (_) { /* localStorage may be blocked */ }
+    })();
+  </script>
 </head>
 <body>
-  <header class="topbar">
-    <div class="brand">
-      <span class="logo-dot"></span>
-      <span class="brand-name">PostmortemEnv</span>
-      <span class="brand-tag">EPISTEMIC RL · LIVE CONSOLE</span>
-    </div>
-    <div class="top-actions">
-      <div class="status-pill" id="statusPill" data-status="idle">
-        <span class="status-text">[ IDLE ]</span>
-      </div>
-      <a class="btn-link" href="/docs" target="_blank" rel="noopener">API</a>
-      <a class="btn-link" href="https://github.com/Auenchanters/Three-Musketeers-FINALS" target="_blank" rel="noopener">GITHUB</a>
+  <a class="skip-link" href="#main">Skip to main content</a>
+
+  <header class="site-header" role="banner">
+    <div class="container header-row">
+      <a class="brand" href="/" aria-label="PostmortemEnv home">
+        <span class="brand-mark" aria-hidden="true"></span>
+        <span class="brand-name">PostmortemEnv</span>
+        <span class="brand-tag">v1.0 · benchmark</span>
+      </a>
+      <nav class="site-nav" aria-label="Primary">
+        <a href="/docs" target="_blank" rel="noopener">Docs</a>
+        <a href="https://github.com/Auenchanters/Three-Musketeers-FINALS" target="_blank" rel="noopener">GitHub</a>
+        <a href="https://huggingface.co/spaces" target="_blank" rel="noopener">HF Space</a>
+        <button class="theme-toggle" id="themeToggle" type="button" aria-label="Toggle color theme" aria-pressed="false">
+          <svg class="theme-icon icon-sun" aria-hidden="true" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6">
+            <circle cx="10" cy="10" r="3.2"/>
+            <path d="M10 1.5v2.5M10 16v2.5M3.5 10H1M19 10h-2.5M4.6 4.6l1.8 1.8M13.6 13.6l1.8 1.8M4.6 15.4l1.8-1.8M13.6 6.4l1.8-1.8" stroke-linecap="round"/>
+          </svg>
+          <svg class="theme-icon icon-moon" aria-hidden="true" viewBox="0 0 20 20" fill="currentColor">
+            <path d="M16.5 12.5a7 7 0 0 1-9-9 .8.8 0 0 0-1-1A8.5 8.5 0 1 0 17.5 13.5a.8.8 0 0 0-1-1z"/>
+          </svg>
+          <span class="sr-only">Toggle theme</span>
+        </button>
+      </nav>
     </div>
   </header>
 
-  <main class="layout">
-    <!-- Left sidebar: scenario + investigator + drawers -->
-    <aside class="sidebar">
-      <section class="section">
-        <div class="section-title"><span class="section-step">[ 01 ]</span> PICK A SCENARIO</div>
-        <ul class="task-list" id="taskList">
-          <li class="task-skeleton">LOADING…</li>
-        </ul>
-      </section>
+  <main id="main" class="container" role="main">
 
-      <section class="section">
-        <div class="section-title"><span class="section-step">[ 02 ]</span> PICK AN INVESTIGATOR</div>
-        <div class="radio-row" id="agentRow">
-          <label class="radio-pill selected"><input type="radio" name="agent" value="oracle" checked><span>ORACLE</span></label>
-          <label class="radio-pill"><input type="radio" name="agent" value="random"><span>RANDOM</span></label>
-          <label class="radio-pill"><input type="radio" name="agent" value="llm"><span>LLM</span></label>
+    <!-- ============================ HERO ============================ -->
+    <section class="hero" aria-labelledby="hero-title">
+      <p class="eyebrow">
+        <span class="chip chip-pytorch" title="Backed by PyTorch training pipelines">
+          <svg viewBox="0 0 24 24" aria-hidden="true" width="12" height="12" fill="currentColor"><path d="M16.5 4.7l-1.4 1.4a6 6 0 1 1-7.5 0L4.7 4.2a8 8 0 1 0 11.8.5zM13 2h-2v6h2V2z"/></svg>
+          PyTorch
+        </span>
+        <span class="chip chip-hf" title="Inference via HuggingFace">
+          <span aria-hidden="true">🤗</span> HuggingFace
+        </span>
+        <span class="eyebrow-text">An epistemic RL benchmark for AI investigators</span>
+      </p>
+      <h1 id="hero-title" class="hero-title">
+        Watch a model investigate a cloud outage —<br />
+        <span class="hero-emph">step by step, on a frozen snapshot.</span>
+      </h1>
+      <p class="hero-lede">
+        Pick a model. Pick a scenario. Press <kbd>Run</kbd>. The investigator queries logs,
+        diffs commits, hypothesizes a cause, and submits a causal chain. Scoring is
+        deterministic — no LLM judge, no vibes.
+      </p>
+
+      <!-- =========== Run controls (model + scenario + run) =========== -->
+      <form class="run-panel" id="runPanel" aria-labelledby="run-panel-heading" novalidate>
+        <h2 id="run-panel-heading" class="sr-only">Run configuration</h2>
+
+        <!-- 1. MODEL SELECTOR ----------------------------------------- -->
+        <div class="run-field run-field-model">
+          <label class="field-label" id="modelLabel" for="modelTrigger">
+            <span class="field-step" aria-hidden="true">01</span>
+            Model
+          </label>
+
+          <div class="combobox" id="modelCombobox">
+            <button
+              type="button"
+              id="modelTrigger"
+              class="combobox-trigger"
+              aria-haspopup="listbox"
+              aria-expanded="false"
+              aria-controls="modelListbox"
+              aria-labelledby="modelLabel modelTrigger"
+            >
+              <span class="model-trigger-content" id="modelTriggerContent">
+                <span class="muted">Loading models…</span>
+              </span>
+              <svg class="caret" aria-hidden="true" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8">
+                <path d="M5 8l5 5 5-5" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </button>
+            <ul
+              id="modelListbox"
+              class="combobox-listbox"
+              role="listbox"
+              aria-labelledby="modelLabel"
+              tabindex="-1"
+              hidden
+            ></ul>
+          </div>
+          <p class="field-help" id="modelHelp">
+            Free-tier models run on PostmortemEnv's HuggingFace credits. Models over $1
+            per run require your own HF token.
+          </p>
         </div>
-        <div id="llmPanel" class="llm-panel hidden">
-          <div class="llm-panel-note">Only needed for the LLM investigator.</div>
-          <label class="field">
-            <span>PROVIDER</span>
-            <select id="llmProvider">
-              <option value="anthropic">Anthropic · Haiku 4.5</option>
-              <option value="openai">OpenAI · gpt-4o-mini</option>
-              <option value="moonshot">Moonshot AI · Kimi-k2.6</option>
-            </select>
+
+        <!-- 2. SCENARIO PICKER --------------------------------------- -->
+        <div class="run-field run-field-task">
+          <label class="field-label" for="taskSelect">
+            <span class="field-step" aria-hidden="true">02</span>
+            Scenario
           </label>
-          <label class="field">
-            <span>API KEY <em>(not stored)</em></span>
-            <input id="llmKey" type="password" autocomplete="off" placeholder="sk-… or anthropic-…" />
-          </label>
-          <label class="field">
-            <span>MODEL OVERRIDE</span>
-            <input id="llmModel" type="text" placeholder="(optional, default used if blank)" />
-          </label>
+          <select id="taskSelect" class="select-native" aria-describedby="taskHelp">
+            <option value="" disabled selected>Loading scenarios…</option>
+          </select>
+          <p class="field-help" id="taskHelp">
+            Each scenario is a frozen telemetry snapshot with a known root cause.
+          </p>
         </div>
-        <div class="action-row">
-          <button class="btn btn-primary" id="runBtn" type="button" title="Start investigation (Ctrl/⌘+Enter)">
-            <span class="btn-label">START INVESTIGATION</span>
-            <span class="btn-kbd">⌃↵</span>
+
+        <!-- 3. RUN BUTTON -------------------------------------------- -->
+        <div class="run-field run-field-go">
+          <button class="btn btn-primary" id="runBtn" type="submit"
+                  title="Start investigation (Ctrl/⌘+Enter)">
+            <span class="btn-label">Run investigation</span>
+            <span class="btn-kbd" aria-hidden="true">⌘↵</span>
           </button>
-          <span class="inline-status" id="inlineStatus"></span>
+          <p class="run-status" id="inlineStatus" aria-live="polite" role="status"></p>
         </div>
-      </section>
 
-      <details class="drawer">
-        <summary>
-          <span class="drawer-icon">[ + ]</span>
-          <span class="drawer-title">DIFFICULTY RATINGS</span>
-          <span class="drawer-hint">How scenarios are weighted by past success</span>
-        </summary>
-        <div id="curriculumPanel" class="curriculum"></div>
-      </details>
+        <!-- 4. CREDENTIAL CARD (paid-tier only) ---------------------- -->
+        <section class="cred-card" id="credCard" hidden aria-labelledby="credCardTitle">
+          <div class="cred-card-head">
+            <h3 id="credCardTitle">HF token required</h3>
+            <span class="chip chip-paid" id="credCardCost">~$1.20 / run</span>
+          </div>
+          <p class="cred-card-body">
+            This model is in the paid tier. Paste a HuggingFace token from
+            <a href="https://huggingface.co/settings/tokens" target="_blank" rel="noopener">
+              huggingface.co/settings/tokens
+            </a>
+            with <code>Inference</code> permission. We use it once for this run and
+            never store it.
+          </p>
+          <div class="cred-input-row">
+            <label class="sr-only" for="hfToken">HuggingFace token</label>
+            <input
+              id="hfToken"
+              class="input"
+              type="password"
+              autocomplete="off"
+              spellcheck="false"
+              placeholder="hf_…"
+              aria-describedby="credCardTitle"
+            />
+            <button class="btn btn-ghost" id="hfTokenReveal" type="button" aria-pressed="false">
+              Show
+            </button>
+          </div>
+        </section>
 
-      <details class="drawer">
-        <summary>
-          <span class="drawer-icon">[ + ]</span>
-          <span class="drawer-title">RECENT RUNS</span>
-          <span class="drawer-hint">Last 12 sessions</span>
-        </summary>
-        <ul class="history-list" id="historyList">
-          <li class="muted empty">— no runs yet —</li>
-        </ul>
-      </details>
-    </aside>
+        <!-- 5. FREE-TIER REASSURANCE -------------------------------- -->
+        <p class="free-tier-note" id="freeTierNote">
+          <svg aria-hidden="true" viewBox="0 0 16 16" width="14" height="14" fill="currentColor">
+            <path d="M8 0a8 8 0 1 0 0 16A8 8 0 0 0 8 0zm3.7 6.2-4.3 4.3a.7.7 0 0 1-1 0L4.3 8.4a.7.7 0 1 1 1-1l1.6 1.6 3.8-3.8a.7.7 0 1 1 1 1z"/>
+          </svg>
+          Runs on PostmortemEnv's HuggingFace credits — no key required.
+        </p>
 
-    <!-- Center: live stream of agent steps -->
-    <section class="stream">
-      <div class="stream-header">
-        <div>
-          <div class="stream-label">LIVE INVESTIGATION</div>
-          <h1 id="streamTitle">Pick a scenario to begin</h1>
-          <p class="subtitle" id="streamSubtitle">Every query, trace, and hypothesis appears here as it happens.</p>
+        <!-- Free-tier disabled banner (server has no HF_TOKEN) -------- -->
+        <div class="banner banner-warn" id="freeTierBanner" hidden role="alert">
+          <strong>Free tier disabled on this deployment.</strong>
+          The server has no <code>HF_TOKEN</code> configured. Pick a paid model and bring your own HF token, or run the local Oracle / Random investigator from the
+          <a href="/docs" target="_blank" rel="noopener">API</a>.
         </div>
-        <div class="stream-meta" id="streamMeta"></div>
-      </div>
-      <div class="stream-body" id="streamBody">
-        <div class="empty-state">
-          <div class="empty-hero">READY.</div>
-          <div class="empty-title">Pick a scenario, choose an investigator, press START.</div>
-          <div class="empty-sub">— no active run —</div>
-        </div>
-      </div>
+      </form>
     </section>
 
-    <!-- Right: results + reasoning -->
-    <aside class="results">
-      <section class="section">
-        <div class="section-title">SCORE</div>
-        <div class="score-bars">
-          <div class="score-row">
-            <span class="label">EPISODE</span>
-            <div class="bar"><div class="fill" id="scoreFill"></div></div>
-            <span class="value" id="scoreValue">—</span>
+    <!-- ============================ RESULTS ============================ -->
+    <div class="results-grid" aria-live="off">
+
+      <!-- Live investigation panel (left, 8/12) -->
+      <section class="panel panel-stream" aria-labelledby="streamTitle">
+        <header class="panel-head">
+          <div>
+            <p class="panel-eyebrow">Live investigation</p>
+            <h2 id="streamTitle" class="panel-title">Pick a model and scenario, then press Run</h2>
+            <p class="panel-sub" id="streamSubtitle">Every query, trace, hypothesis, and reward appears here as it happens.</p>
           </div>
-          <div class="score-row">
-            <span class="label">BUDGET</span>
-            <div class="bar"><div class="fill alt" id="budgetFill"></div></div>
-            <span class="value" id="budgetValue">— / —</span>
+          <div class="panel-meta" id="streamMeta" aria-label="Run metadata"></div>
+        </header>
+
+        <div
+          class="stream-body"
+          id="streamBody"
+          aria-live="polite"
+          aria-relevant="additions"
+          aria-atomic="false"
+          aria-label="Investigation steps"
+        >
+          <div class="empty-state">
+            <div class="empty-hero" aria-hidden="true">
+              <svg viewBox="0 0 64 64" width="56" height="56" fill="none" stroke="currentColor" stroke-width="1.4">
+                <circle cx="32" cy="32" r="22"/>
+                <path d="M32 16v16l10 6" stroke-linecap="round"/>
+              </svg>
+            </div>
+            <p class="empty-title">Ready when you are.</p>
+            <p class="empty-sub">No active run.</p>
           </div>
         </div>
-        <div class="score-grid">
-          <div class="stat"><div class="stat-label">FACTS</div><div class="stat-value" id="statFacts">0</div></div>
-          <div class="stat"><div class="stat-label">WRONG HYP</div><div class="stat-value" id="statWrong">0</div></div>
-          <div class="stat"><div class="stat-label">TOKENS IN</div><div class="stat-value" id="statTokensIn">0</div></div>
-          <div class="stat"><div class="stat-label">CACHED</div><div class="stat-value" id="statCached">0</div></div>
+      </section>
+
+      <!-- Results panel (right, 4/12) -->
+      <aside class="panel panel-results" aria-labelledby="resultsHeading">
+        <h2 id="resultsHeading" class="sr-only">Results</h2>
+
+        <section class="panel-section">
+          <h3 class="section-title">Score</h3>
+          <div class="score-bars">
+            <div class="score-row">
+              <span class="score-label">Episode</span>
+              <div class="bar"><div class="fill" id="scoreFill"></div></div>
+              <span class="score-value" id="scoreValue">—</span>
+            </div>
+            <div class="score-row">
+              <span class="score-label">Budget</span>
+              <div class="bar"><div class="fill alt" id="budgetFill"></div></div>
+              <span class="score-value" id="budgetValue">— / —</span>
+            </div>
+          </div>
+          <dl class="score-grid">
+            <div class="stat"><dt>Facts</dt><dd id="statFacts">0</dd></div>
+            <div class="stat"><dt>Wrong hyp.</dt><dd id="statWrong">0</dd></div>
+            <div class="stat"><dt>Tokens in</dt><dd id="statTokensIn">0</dd></div>
+            <div class="stat"><dt>Cached</dt><dd id="statCached">0</dd></div>
+          </dl>
+        </section>
+
+        <section class="panel-section">
+          <h3 class="section-title">Identified root cause</h3>
+          <div class="cause-slot" id="causeSlot">
+            <span class="muted">—</span>
+          </div>
+        </section>
+
+        <section class="panel-section">
+          <h3 class="section-title">Sequence of effects</h3>
+          <ol class="chain-list" id="chainList">
+            <li class="muted">—</li>
+          </ol>
+        </section>
+
+        <section class="panel-section">
+          <h3 class="section-title">Service dependencies</h3>
+          <div class="graph" id="graph" role="img" aria-label="Service dependency graph"></div>
+        </section>
+
+        <details class="drawer">
+          <summary>
+            <span class="drawer-title">Recent runs</span>
+            <span class="drawer-hint">Last 12 sessions</span>
+          </summary>
+          <ul class="history-list" id="historyList">
+            <li class="muted">No runs yet.</li>
+          </ul>
+        </details>
+
+        <details class="drawer">
+          <summary>
+            <span class="drawer-title">Difficulty ratings</span>
+            <span class="drawer-hint">ELO-weighted scenarios</span>
+          </summary>
+          <div id="curriculumPanel" class="curriculum"></div>
+        </details>
+      </aside>
+    </div>
+
+    <!-- ============================ LIVE TRAINING ============================ -->
+    <!--
+      Real REINFORCE trains in-process against the same PostmortemEnvironment
+      reward signal SFT/GRPO use. Each click is a fresh on-policy training run
+      — no pre-recorded curve, no LLM, just the discrete action policy
+      learning from the env's terminal score. Stream contract is in
+      web/runner.py at /api/training/start + /api/training/stream/{id}.
+    -->
+    <section class="panel panel-training" aria-labelledby="trainingTitle">
+      <header class="panel-head">
+        <div>
+          <p class="panel-eyebrow">Live training</p>
+          <h2 id="trainingTitle" class="panel-title">Watch a policy learn from scratch.</h2>
+          <p class="panel-sub">
+            REINFORCE trains a softmax policy against the env's reward signal —
+            the same signal the SFT and GRPO pipelines optimise. Every click
+            is a fresh run from a uniform-random policy. The trained curve
+            should visibly climb above the random baseline within ~15&nbsp;seconds.
+          </p>
         </div>
-      </section>
-
-      <section class="section">
-        <div class="section-title">IDENTIFIED ROOT CAUSE</div>
-        <div class="cause-slot" id="causeSlot">
-          <span class="muted">—</span>
+        <div class="panel-meta" id="trainingMeta" aria-label="Training metadata">
+          <span class="meta-chip">algo <strong>REINFORCE</strong></span>
+          <span class="meta-chip">runtime <strong id="trainingRuntime">local</strong></span>
         </div>
-      </section>
+      </header>
 
-      <section class="section">
-        <div class="section-title">SEQUENCE OF EFFECTS</div>
-        <ol class="chain-list" id="chainList">
-          <li class="muted">—</li>
-        </ol>
-      </section>
+      <div class="training-toolbar">
+        <div class="training-control">
+          <label class="field-label" for="trainingTaskSelect">
+            <span class="field-step" aria-hidden="true">A</span>
+            Task
+          </label>
+          <select id="trainingTaskSelect" class="select-native">
+            <option value="" disabled selected>Loading scenarios…</option>
+          </select>
+        </div>
+        <div class="training-control training-control-eps">
+          <label class="field-label" for="trainingEpsInput">
+            <span class="field-step" aria-hidden="true">B</span>
+            Episodes
+          </label>
+          <input id="trainingEpsInput" class="input training-eps-input"
+                 type="number" min="50" max="600" step="50" value="500" />
+        </div>
+        <div class="training-control training-control-go">
+          <button id="trainingStartBtn" class="btn btn-primary" type="button">
+            <span class="btn-label">Start training</span>
+            <span class="btn-kbd" aria-hidden="true">⇧↵</span>
+          </button>
+          <p class="run-status" id="trainingStatus" aria-live="polite" role="status"></p>
+        </div>
+      </div>
 
-      <section class="section">
-        <div class="section-title">SERVICE DEPENDENCIES</div>
-        <div class="graph" id="graph"></div>
-      </section>
-    </aside>
+      <div class="training-summary" aria-live="polite">
+        <div class="training-stat">
+          <span class="training-stat-label">Episode</span>
+          <span class="training-stat-value" id="trainingEpisodeNow">— / —</span>
+        </div>
+        <div class="training-stat">
+          <span class="training-stat-label">Random baseline</span>
+          <span class="training-stat-value training-stat-baseline" id="trainingBaseline">—</span>
+        </div>
+        <div class="training-stat">
+          <span class="training-stat-label">Rolling mean</span>
+          <span class="training-stat-value training-stat-trained" id="trainingRolling">—</span>
+        </div>
+        <div class="training-stat">
+          <span class="training-stat-label">Lift over random</span>
+          <span class="training-stat-value training-stat-lift" id="trainingLift">—</span>
+        </div>
+      </div>
+
+      <div class="training-chart" id="trainingChart" role="img"
+           aria-label="Live reward-vs-episode chart with random baseline reference">
+        <!-- Chart is rendered via static/app.js into this container as SVG. -->
+        <div class="training-chart-empty" id="trainingChartEmpty">
+          <p class="training-chart-empty-title">Press <kbd>Start training</kbd> to begin a fresh run.</p>
+          <p class="training-chart-empty-sub">
+            The agent starts at the random baseline (~0.25) and learns from terminal-episode reward.
+          </p>
+        </div>
+      </div>
+
+      <div class="training-legend" aria-hidden="true">
+        <span class="training-legend-item">
+          <span class="training-legend-swatch training-swatch-baseline"></span>
+          Random baseline (uniform-random policy, 12-episode estimate)
+        </span>
+        <span class="training-legend-item">
+          <span class="training-legend-swatch training-swatch-trained"></span>
+          Trained agent (rolling mean of last 20 episodes)
+        </span>
+        <span class="training-legend-item">
+          <span class="training-legend-swatch training-swatch-raw"></span>
+          Per-episode reward (raw)
+        </span>
+      </div>
+    </section>
   </main>
+
+  <footer class="site-footer">
+    <div class="container footer-row">
+      <p>
+        PostmortemEnv · An open benchmark from the Three Musketeers team.
+        <a href="/docs" target="_blank" rel="noopener">API</a> ·
+        <a href="https://github.com/Auenchanters/Three-Musketeers-FINALS" target="_blank" rel="noopener">Source</a> ·
+        <a href="https://huggingface.co/spaces" target="_blank" rel="noopener">Hosted on HF Spaces</a>
+      </p>
+      <p class="footer-meta">
+        Cost estimates assume 5K input + 2K output tokens at HuggingFace Inference pricing.
+      </p>
+    </div>
+  </footer>
 
   <script src="/static/app.js" type="module"></script>
 </body>

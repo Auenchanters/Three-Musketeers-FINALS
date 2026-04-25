@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -31,7 +32,9 @@ from pydantic import BaseModel
 from data.generator import get_all_tasks
 from engine.environment import PostmortemEnvironment
 from web import curriculum
-from web.agents import LLMAgent, OracleAgent, RandomAgent
+from web.agents import HFInferenceAgent, LLMAgent, OracleAgent, RandomAgent
+from web.models_registry import MODELS, get_model, public_list
+from web.training_loop import LearningSession, get_store as get_training_store
 
 RUNS_DIR = Path(__file__).resolve().parent.parent / "training_data" / "runs"
 MAX_RUNS = 50
@@ -97,11 +100,14 @@ _store = _RunStore()
 
 
 class StartRunBody(BaseModel):
-    agent: str = "oracle"  # oracle | random | llm
+    agent: str = "oracle"  # oracle | random | llm | hf
     task_id: str = "task1_recent_deploy"
     provider: str | None = None
     model: str | None = None
     api_key: str | None = None
+    # New fields for the HF-powered model dropdown:
+    model_id: str | None = None  # registry id, e.g. "qwen2.5-7b-instruct"
+    hf_token: str | None = None  # required for paid-tier models
 
 
 class StartRunResponse(BaseModel):
@@ -121,6 +127,35 @@ def _make_agent(body: StartRunBody):
         return OracleAgent()
     if kind == "random":
         return RandomAgent()
+    if kind == "hf" or (kind == "llm" and body.model_id):
+        info = get_model(body.model_id or "")
+        if info is None:
+            raise HTTPException(
+                400, f"Unknown model_id: {body.model_id!r}. See GET /api/models."
+            )
+        if info.tier == "free":
+            server_token = os.environ.get("HF_TOKEN") or os.environ.get(
+                "HUGGINGFACE_TOKEN"
+            )
+            if not server_token:
+                raise HTTPException(
+                    503,
+                    "Free tier disabled on this deployment: set HF_TOKEN on the "
+                    "server, or pick a paid model and supply your own HF token.",
+                )
+            return HFInferenceAgent(
+                repo=info.repo, token=server_token, model_id=info.id
+            )
+        # paid tier — user must bring their own token
+        if not body.hf_token:
+            raise HTTPException(
+                400,
+                f"Model {info.display_name!r} is paid-tier (~${info.est_cost_usd:.2f}/run) "
+                "and requires your own HF token. Paste one in the credential card.",
+            )
+        return HFInferenceAgent(
+            repo=info.repo, token=body.hf_token, model_id=info.id
+        )
     if kind == "llm":
         return LLMAgent(provider=body.provider, model=body.model, api_key=body.api_key)
     raise HTTPException(400, f"Unknown agent type: {body.agent}")
@@ -256,6 +291,26 @@ async def list_tasks() -> JSONResponse:
     return JSONResponse(items)
 
 
+@router.get("/models")
+async def list_models() -> JSONResponse:
+    """Return the curated model registry for the UI dropdown.
+
+    Each entry includes a `free_tier_available` flag: false for free-tier
+    models when the server has no HF_TOKEN configured, telling the UI to
+    show a "bring your own HF token" banner instead of letting users press
+    Run with no fallback.
+    """
+    has_server_token = bool(
+        os.environ.get("HF_TOKEN") or os.environ.get("HUGGINGFACE_TOKEN")
+    )
+    return JSONResponse(
+        {
+            "models": public_list(free_tier_available=has_server_token),
+            "free_tier_available": has_server_token,
+        }
+    )
+
+
 @router.get("/curriculum")
 async def get_curriculum() -> JSONResponse:
     return JSONResponse(curriculum.load_state())
@@ -287,9 +342,12 @@ async def get_run(run_id: str) -> JSONResponse:
 @router.post("/runs")
 async def start_run(body: StartRunBody) -> StartRunResponse:
     agent = _make_agent(body)
-    run = await _store.create(body.agent, body.task_id)
+    # Display name for the recent-runs panel: prefer the registry id when
+    # the user picked a model, fall back to the raw agent kind otherwise.
+    display_kind = body.model_id or body.agent
+    run = await _store.create(display_kind, body.task_id)
     asyncio.create_task(_run_agent(run, agent, body.task_id))
-    return StartRunResponse(run_id=run.run_id, agent=body.agent, task_id=body.task_id)
+    return StartRunResponse(run_id=run.run_id, agent=display_kind, task_id=body.task_id)
 
 
 @router.get("/stream/{run_id}")
@@ -336,3 +394,115 @@ async def stream_run(run_id: str, request: Request) -> StreamingResponse:
 def _sse(event: dict[str, Any]) -> bytes:
     payload = json.dumps(event, default=str)
     return f"event: {event.get('type', 'message')}\ndata: {payload}\n\n".encode("utf-8")
+
+
+# ---------------------------------------------------------------------------
+# Live-training routes (REINFORCE on the real env reward — see web/training_loop.py)
+# ---------------------------------------------------------------------------
+#
+# These routes power the "Live training" panel in the UI. The agent itself is
+# the tabular-REINFORCE softmax policy in web.training_loop, training on the
+# *same* PostmortemEnvironment reward signal used by SFT/GRPO. No LLM is
+# involved here — this is a CPU-only learner whose only purpose is to give
+# judges a live, real-time visual proof that *something* in this environment
+# is actually learnable from the reward signal alone.
+#
+# Stream contract (events emitted on /api/training/stream/{id}):
+#   baselines  → { task_id, random, action_menu_size, n_episodes, runtime }
+#   metric     → { episode, score, rolling_mean, best, lift_over_random,
+#                  elapsed_sec }
+#   done       → { final_rolling_mean, lift_over_random, n_episodes, runtime }
+#   error      → { message }
+#   _eof       → terminal sentinel (subscribe loop closes after this)
+
+
+class StartTrainingBody(BaseModel):
+    task_id: str = "task1_recent_deploy"
+    # 500 episodes × 30ms cadence ≈ 15s of demo. Below 200 the curve looks
+    # noisy; above 1000 the policy has plateaued and the user is just waiting.
+    n_episodes: int = 500
+    seed: int | None = None
+
+
+class StartTrainingResponse(BaseModel):
+    session_id: str
+    task_id: str
+    n_episodes: int
+    runtime: str
+
+
+@router.post("/training/start")
+async def start_training(body: StartTrainingBody) -> StartTrainingResponse:
+    # Cap at 600 episodes to keep one demo under ~30s (50ms/ep cadence).
+    n_eps = max(20, min(600, int(body.n_episodes)))
+    store = get_training_store()
+    sess = await store.create(
+        task_id=body.task_id,
+        n_episodes=n_eps,
+        seed=body.seed,
+        runtime="local",
+    )
+    asyncio.create_task(sess.run())
+    return StartTrainingResponse(
+        session_id=sess.session_id,
+        task_id=sess.task_id,
+        n_episodes=sess.n_episodes,
+        runtime=sess.runtime,
+    )
+
+
+@router.get("/training/sessions")
+async def list_training_sessions() -> JSONResponse:
+    return JSONResponse(get_training_store().list())
+
+
+@router.get("/training/stream/{session_id}")
+async def stream_training(
+    session_id: str, request: Request
+) -> StreamingResponse:
+    sess = get_training_store().get(session_id)
+    if not sess:
+        raise HTTPException(404, "training session not found")
+
+    queue: asyncio.Queue = asyncio.Queue()
+    sess.subscribers.append(queue)
+    backlog = list(sess.metrics)
+
+    async def gen() -> AsyncGenerator[bytes, None]:
+        try:
+            for ev in backlog:
+                yield _sse(ev)
+            # If the session terminated *before* this subscriber registered,
+            # the run() coroutine has already pushed the closing `None`
+            # sentinel to every then-known subscriber's queue and returned.
+            # New subscribers never get a sentinel, so a naive
+            # `await queue.get()` would hang forever and clients would see a
+            # silent stall. Detect terminal status from the session itself
+            # and short-circuit with an immediate _eof — the backlog above
+            # already contains every event that was ever emitted.
+            if sess.status in ("done", "error"):
+                yield _sse({"type": "_eof"})
+                return
+            while True:
+                if await request.is_disconnected():
+                    break
+                ev = await queue.get()
+                if ev is None:
+                    yield _sse({"type": "_eof"})
+                    break
+                yield _sse(ev)
+        finally:
+            try:
+                sess.subscribers.remove(queue)
+            except ValueError:
+                pass
+
+    return StreamingResponse(
+        gen(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache, no-transform",
+            "X-Accel-Buffering": "no",
+            "Connection": "keep-alive",
+        },
+    )

@@ -1,12 +1,27 @@
-/* PostmortemEnv live console — vanilla JS, no framework.
-   Streams agent events over SSE and renders them with Perplexity-style polish.
+/* PostmortemEnv · live console
+   Vanilla JS, no framework. Streams agent events over SSE and renders them
+   into the research-lab UI. The new flow:
+
+     1. loadModels()  → populates the combobox (free + paid groups).
+     2. user picks a model → applyModelSelection(id) toggles the credential
+        card and free-tier note.
+     3. user picks a scenario, presses Run → POST /api/runs with
+        { agent: "hf", model_id, hf_token? , task_id }.
+     4. SSE handlers (onReset/onStep/onThought/onUsage/onDone/onCurriculum)
+        unchanged in spirit — they render into the new layout.
 */
 
 const $ = (id) => document.getElementById(id);
 
 const state = {
+  // run/scenario
   tasks: [],
   selectedTaskId: null,
+  // model
+  models: [],
+  freeTierAvailable: true,
+  selectedModelId: null,
+  // streaming
   currentRun: null,
   eventSource: null,
   scenarioMeta: null,
@@ -19,31 +34,84 @@ const state = {
   tokensCached: 0,
 };
 
+const STORAGE_KEYS = {
+  theme: "pme.theme",
+  model: "pme.model_id",
+};
+
 // --------------------------------------------------------------------- init
 
 document.addEventListener("DOMContentLoaded", async () => {
-  bindAgentRow();
-  bindRunButton();
+  bindThemeToggle();
+  bindRunForm();
+  bindHfTokenReveal();
+  bindTrainingPanel();
   renderSegments($("scoreFill"), 0);
   renderSegments($("budgetFill"), 0);
-  await loadTasks();
-  await loadCurriculum();
-  await loadHistory();
+
+  await Promise.all([loadModels(), loadTasks(), loadCurriculum(), loadHistory()]);
 });
 
+// --------------------------------------------------------------------- theme
+
+function bindThemeToggle() {
+  const btn = $("themeToggle");
+  if (!btn) return;
+  syncThemeToggleState();
+  btn.addEventListener("click", () => {
+    const cur = document.documentElement.getAttribute("data-theme") || "light";
+    const next = cur === "dark" ? "light" : "dark";
+    document.documentElement.setAttribute("data-theme", next);
+    try { localStorage.setItem(STORAGE_KEYS.theme, next); } catch {}
+    syncThemeToggleState();
+  });
+}
+
+function syncThemeToggleState() {
+  const btn = $("themeToggle");
+  if (!btn) return;
+  const isDark = document.documentElement.getAttribute("data-theme") === "dark";
+  btn.setAttribute("aria-pressed", String(isDark));
+  btn.setAttribute("aria-label", isDark ? "Switch to light theme" : "Switch to dark theme");
+}
+
 // --------------------------------------------------------------------- data
+
+async function loadModels() {
+  try {
+    const res = await fetch("/api/models");
+    if (!res.ok) throw new Error(`${res.status}`);
+    const data = await res.json();
+    state.models = data.models || [];
+    state.freeTierAvailable = !!data.free_tier_available;
+    if (!state.freeTierAvailable) $("freeTierBanner").hidden = false;
+    renderModelListbox();
+    bindCombobox();
+
+    // Restore previous selection or pick the first free-tier model.
+    let preferred = null;
+    try { preferred = localStorage.getItem(STORAGE_KEYS.model); } catch {}
+    const initial =
+      state.models.find((m) => m.id === preferred) ||
+      state.models.find((m) => m.tier === "free" && m.free_tier_available) ||
+      state.models[0];
+    if (initial) applyModelSelection(initial.id);
+  } catch (e) {
+    setStatus(`Failed to load models: ${e.message}`, "error");
+  }
+}
 
 async function loadTasks() {
   try {
     const res = await fetch("/api/tasks");
     if (!res.ok) throw new Error(`${res.status}`);
     state.tasks = await res.json();
-    renderTaskList();
+    renderTaskSelect();
     if (state.tasks.length && !state.selectedTaskId) {
       selectTask(state.tasks[0].task_id);
     }
   } catch (e) {
-    toast(`Failed to load tasks: ${e.message}`, "error");
+    setStatus(`Failed to load tasks: ${e.message}`, "error");
   }
 }
 
@@ -52,9 +120,7 @@ async function loadCurriculum() {
     const res = await fetch("/api/curriculum");
     const data = await res.json();
     renderCurriculum(data);
-  } catch {
-    // silent
-  }
+  } catch { /* silent */ }
 }
 
 async function loadHistory() {
@@ -62,57 +128,264 @@ async function loadHistory() {
     const res = await fetch("/api/runs");
     const data = await res.json();
     renderHistory(data);
-  } catch {
-    // silent
+  } catch { /* silent */ }
+}
+
+// --------------------------------------------------------------------- model combobox
+
+function renderModelListbox() {
+  const ul = $("modelListbox");
+  ul.innerHTML = "";
+
+  const groups = [
+    { tier: "free", label: "Free tier · runs on HF credits" },
+    { tier: "paid", label: "Paid tier · bring your own HF token" },
+  ];
+
+  for (const g of groups) {
+    const items = state.models.filter((m) => m.tier === g.tier);
+    if (!items.length) continue;
+    const header = document.createElement("li");
+    header.className = "combobox-group-label";
+    header.setAttribute("role", "presentation");
+    header.textContent = g.label;
+    ul.appendChild(header);
+
+    for (const m of items) {
+      const li = document.createElement("li");
+      li.className = "model-row";
+      li.setAttribute("role", "option");
+      li.id = `opt-${m.id}`;
+      li.dataset.modelId = m.id;
+      li.setAttribute("aria-selected", "false");
+      const disabled = m.tier === "free" && !m.free_tier_available;
+      if (disabled) li.setAttribute("aria-disabled", "true");
+
+      const chip = m.tier === "free"
+        ? `<span class="chip chip-free">Free · ~$${m.est_cost_usd.toFixed(2)}</span>`
+        : `<span class="chip chip-paid">~$${m.est_cost_usd.toFixed(2)} / run</span>`;
+
+      li.innerHTML = `
+        <span class="model-logo" aria-hidden="true">🤗</span>
+        <span class="model-name">
+          ${escapeHtml(m.display_name)}
+          <span class="model-meta">${m.params_b}B · ${formatCtx(m.context_window)} ctx · ${escapeHtml(m.license)}</span>
+        </span>
+        <span class="model-blurb">${escapeHtml(m.blurb)}</span>
+        <span class="model-chip-cell">${chip}</span>
+      `;
+      li.addEventListener("click", () => {
+        if (li.getAttribute("aria-disabled") === "true") return;
+        applyModelSelection(m.id);
+        closeListbox();
+        $("modelTrigger").focus();
+      });
+      ul.appendChild(li);
+    }
   }
 }
 
-// --------------------------------------------------------------------- render: sidebar
+function bindCombobox() {
+  const trigger = $("modelTrigger");
+  const listbox = $("modelListbox");
 
-function renderTaskList() {
-  const ul = $("taskList");
-  ul.innerHTML = "";
-  for (const t of state.tasks) {
-    const li = document.createElement("li");
-    li.className = "task-item" + (t.task_id === state.selectedTaskId ? " selected" : "");
-    li.innerHTML = `
-      <span class="name">${escapeHtml(t.name)}</span>
-      <span class="meta">
-        <span class="difficulty ${t.difficulty}">${t.difficulty}</span>
-        <span>${t.max_steps} steps</span>
+  trigger.addEventListener("click", () => {
+    const open = trigger.getAttribute("aria-expanded") === "true";
+    open ? closeListbox() : openListbox();
+  });
+
+  trigger.addEventListener("keydown", (e) => {
+    if (e.key === "ArrowDown" || e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      openListbox();
+      moveActive(0);
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      openListbox();
+      moveActive(-1, /* fromEnd */ true);
+    }
+  });
+
+  listbox.addEventListener("keydown", (e) => {
+    const options = optionEls();
+    const cur = options.findIndex((el) => el.classList.contains("active"));
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      moveActive(cur < 0 ? 0 : (cur + 1) % options.length);
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      moveActive(cur < 0 ? options.length - 1 : (cur - 1 + options.length) % options.length);
+    } else if (e.key === "Home") {
+      e.preventDefault(); moveActive(0);
+    } else if (e.key === "End") {
+      e.preventDefault(); moveActive(options.length - 1);
+    } else if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      const active = options[cur];
+      if (active && active.getAttribute("aria-disabled") !== "true") {
+        applyModelSelection(active.dataset.modelId);
+        closeListbox();
+        trigger.focus();
+      }
+    } else if (e.key === "Escape" || e.key === "Tab") {
+      closeListbox();
+      if (e.key === "Escape") trigger.focus();
+    } else if (e.key.length === 1 && /\S/.test(e.key)) {
+      // Type-ahead by first letter
+      const letter = e.key.toLowerCase();
+      const start = (cur + 1) % options.length;
+      for (let i = 0; i < options.length; i++) {
+        const idx = (start + i) % options.length;
+        const name = options[idx].querySelector(".model-name")?.textContent.trim().toLowerCase() || "";
+        if (name.startsWith(letter)) { moveActive(idx); break; }
+      }
+    }
+  });
+
+  document.addEventListener("click", (e) => {
+    if (!$("modelCombobox").contains(e.target)) closeListbox();
+  });
+}
+
+function optionEls() {
+  return Array.from($("modelListbox").querySelectorAll(".model-row"));
+}
+
+function moveActive(idx, fromEnd = false) {
+  const options = optionEls();
+  if (!options.length) return;
+  if (fromEnd) idx = options.length - 1;
+  options.forEach((el) => el.classList.remove("active"));
+  const target = options[idx];
+  if (!target) return;
+  target.classList.add("active");
+  target.scrollIntoView({ block: "nearest" });
+  $("modelTrigger").setAttribute("aria-activedescendant", target.id);
+}
+
+function openListbox() {
+  const trigger = $("modelTrigger");
+  const listbox = $("modelListbox");
+  trigger.setAttribute("aria-expanded", "true");
+  listbox.hidden = false;
+  // Move focus inside the listbox so arrow keys are scoped here
+  listbox.focus();
+  // Highlight current selection
+  const sel = optionEls().findIndex((el) => el.dataset.modelId === state.selectedModelId);
+  if (sel >= 0) moveActive(sel);
+}
+
+function closeListbox() {
+  $("modelTrigger").setAttribute("aria-expanded", "false");
+  $("modelListbox").hidden = true;
+  $("modelTrigger").removeAttribute("aria-activedescendant");
+}
+
+function applyModelSelection(modelId) {
+  const m = state.models.find((x) => x.id === modelId);
+  if (!m) return;
+  state.selectedModelId = m.id;
+  try { localStorage.setItem(STORAGE_KEYS.model, m.id); } catch {}
+
+  // Update trigger content
+  const chip = m.tier === "free"
+    ? `<span class="chip chip-free">Free · ~$${m.est_cost_usd.toFixed(2)}</span>`
+    : `<span class="chip chip-paid">~$${m.est_cost_usd.toFixed(2)} / run</span>`;
+  $("modelTriggerContent").innerHTML = `
+    <span class="trigger-row">
+      <span class="model-logo" aria-hidden="true">🤗</span>
+      <span class="model-name">
+        ${escapeHtml(m.display_name)}
+        <span class="model-meta">${m.params_b}B · ${formatCtx(m.context_window)} ctx</span>
       </span>
-    `;
-    li.addEventListener("click", () => selectTask(t.task_id));
-    ul.appendChild(li);
+      <span class="model-chip-cell">${chip}</span>
+    </span>
+  `;
+
+  // Update aria-selected on options
+  optionEls().forEach((el) => {
+    el.setAttribute("aria-selected", String(el.dataset.modelId === m.id));
+  });
+
+  // Toggle credential card vs free-tier note
+  const isPaid = m.tier === "paid";
+  $("credCard").hidden = !isPaid;
+  $("freeTierNote").hidden = isPaid || !state.freeTierAvailable;
+  $("credCardCost").textContent = `~$${m.est_cost_usd.toFixed(2)} / run`;
+  $("credCardTitle").textContent = isPaid ? "HF token required" : "HF token";
+
+  // Free-tier disabled, even free models need a user token → show cred card
+  if (m.tier === "free" && !state.freeTierAvailable) {
+    $("credCard").hidden = false;
+    $("credCardTitle").textContent = "HF token required (server has no free tier)";
+    $("freeTierNote").hidden = true;
+  }
+}
+
+function formatCtx(n) {
+  if (n >= 1024) return `${Math.round(n / 1024)}K`;
+  return String(n);
+}
+
+// --------------------------------------------------------------------- task select
+
+function renderTaskSelect() {
+  const sel = $("taskSelect");
+  sel.innerHTML = "";
+  for (const t of state.tasks) {
+    const opt = document.createElement("option");
+    opt.value = t.task_id;
+    opt.textContent = `${t.name}  ·  ${t.difficulty}  ·  ${t.max_steps} steps`;
+    sel.appendChild(opt);
+  }
+  sel.addEventListener("change", () => selectTask(sel.value));
+
+  // Mirror the same task list into the live-training panel's selector.
+  // Default it to a task where REINFORCE shows a clear lift in <500 episodes.
+  const trainSel = $("trainingTaskSelect");
+  if (trainSel) {
+    trainSel.innerHTML = "";
+    const PREFERRED_DEFAULT = "task5_data_corruption_cascade";
+    for (const t of state.tasks) {
+      const opt = document.createElement("option");
+      opt.value = t.task_id;
+      opt.textContent = `${t.name}  ·  ${t.difficulty}`;
+      trainSel.appendChild(opt);
+    }
+    const def = state.tasks.find((t) => t.task_id === PREFERRED_DEFAULT)
+      || state.tasks[0];
+    if (def) trainSel.value = def.task_id;
   }
 }
 
 function selectTask(id) {
   state.selectedTaskId = id;
-  renderTaskList();
   const t = state.tasks.find((x) => x.task_id === id);
   if (t) {
     $("streamTitle").textContent = t.name;
-    $("streamSubtitle").textContent = t.description;
+    $("streamSubtitle").textContent = t.description || "Frozen telemetry awaits investigation.";
+    if ($("taskSelect").value !== id) $("taskSelect").value = id;
   }
 }
 
 function renderCurriculum(data) {
   const el = $("curriculumPanel");
+  if (!el) return;
   el.innerHTML = "";
   const tasks = data.tasks || {};
   for (const [tid, info] of Object.entries(tasks)) {
     const solveRate = info.attempts ? Math.round((100 * info.solves) / info.attempts) : 0;
     const row = document.createElement("div");
     row.className = "curriculum-row";
+    const mult = info.difficulty_multiplier || 1;
     row.innerHTML = `
       <div class="top">
         <span class="name">${escapeHtml(shortTaskName(tid))}</span>
         <span class="elo">ELO ${Math.round(info.elo || 0)}</span>
       </div>
       <div class="bot">
-        <span>×${(info.difficulty_multiplier || 1).toFixed(2)}</span>
-        <div class="mult-bar"><div style="width:${Math.min(100, ((info.difficulty_multiplier || 1) - 0.6) / 1.9 * 100)}%"></div></div>
+        <span>×${mult.toFixed(2)}</span>
+        <div class="mult-bar"><div style="width:${Math.min(100, (mult - 0.6) / 1.9 * 100)}%"></div></div>
         <span>${info.attempts || 0} runs · ${solveRate}% solved</span>
       </div>
     `;
@@ -122,9 +395,10 @@ function renderCurriculum(data) {
 
 function renderHistory(runs) {
   const ul = $("historyList");
+  if (!ul) return;
   ul.innerHTML = "";
   if (!runs.length) {
-    ul.innerHTML = '<li class="muted empty">no runs yet</li>';
+    ul.innerHTML = '<li class="muted history-item">No runs yet.</li>';
     return;
   }
   for (const r of runs.slice(0, 12)) {
@@ -132,8 +406,7 @@ function renderHistory(runs) {
     li.className = "history-item";
     const scoreCls = (r.final_score ?? 0) >= 0.70 ? "win" : "loss";
     const scoreTxt = r.final_score !== null && r.final_score !== undefined
-      ? r.final_score.toFixed(2)
-      : "—";
+      ? r.final_score.toFixed(2) : "—";
     li.innerHTML = `
       <span class="task">${escapeHtml(shortTaskName(r.task_id))} · ${escapeHtml(r.agent_type)}</span>
       <span class="score ${scoreCls}">${scoreTxt}</span>
@@ -142,24 +415,28 @@ function renderHistory(runs) {
   }
 }
 
-// --------------------------------------------------------------------- agent picker
+// --------------------------------------------------------------------- credential card
 
-function bindAgentRow() {
-  const row = $("agentRow");
-  row.addEventListener("change", (e) => {
-    const v = e.target.value;
-    for (const pill of row.querySelectorAll(".radio-pill")) {
-      pill.classList.toggle("selected", pill.querySelector("input").value === v);
-    }
-    $("llmPanel").classList.toggle("hidden", v !== "llm");
+function bindHfTokenReveal() {
+  const btn = $("hfTokenReveal");
+  const inp = $("hfToken");
+  if (!btn || !inp) return;
+  btn.addEventListener("click", () => {
+    const showing = inp.type === "text";
+    inp.type = showing ? "password" : "text";
+    btn.textContent = showing ? "Show" : "Hide";
+    btn.setAttribute("aria-pressed", String(!showing));
   });
 }
 
 // --------------------------------------------------------------------- run
 
-function bindRunButton() {
-  const btn = $("runBtn");
-  btn.addEventListener("click", startRun);
+function bindRunForm() {
+  const form = $("runPanel");
+  form.addEventListener("submit", (e) => {
+    e.preventDefault();
+    startRun();
+  });
   document.addEventListener("keydown", (e) => {
     if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
       e.preventDefault();
@@ -170,26 +447,32 @@ function bindRunButton() {
 
 async function startRun() {
   if (!state.selectedTaskId) {
-    toast("Pick a scenario first", "error");
+    setStatus("Pick a scenario first.", "error");
     return;
   }
-  const agent = document.querySelector('input[name="agent"]:checked').value;
+  if (!state.selectedModelId) {
+    setStatus("Pick a model first.", "error");
+    return;
+  }
+  const model = state.models.find((m) => m.id === state.selectedModelId);
+  if (!model) {
+    setStatus("Selected model is no longer available.", "error");
+    return;
+  }
+  const needsToken = model.tier === "paid" || (model.tier === "free" && !state.freeTierAvailable);
+  const hfToken = $("hfToken").value.trim();
+  if (needsToken && !hfToken) {
+    setStatus("This model needs your HuggingFace token.", "error");
+    $("hfToken").focus();
+    return;
+  }
 
   const body = {
-    agent,
+    agent: "hf",
     task_id: state.selectedTaskId,
+    model_id: state.selectedModelId,
   };
-  if (agent === "llm") {
-    body.provider = $("llmProvider").value;
-    const key = $("llmKey").value.trim();
-    const model = $("llmModel").value.trim();
-    if (!key) {
-      toast("LLM mode needs an API key (not stored, sent to provider only)", "error");
-      return;
-    }
-    body.api_key = key;
-    if (model) body.model = model;
-  }
+  if (needsToken) body.hf_token = hfToken;
 
   // reset UI
   clearStream();
@@ -205,9 +488,9 @@ async function startRun() {
   $("causeSlot").classList.remove("matched");
   $("chainList").innerHTML = '<li class="muted">—</li>';
 
-  setStatus("running");
   $("runBtn").disabled = true;
-  $("runBtn").querySelector(".btn-label").textContent = "RUNNING…";
+  $("runBtn").querySelector(".btn-label").textContent = "Running…";
+  setStatus(`Starting run with ${model.display_name}…`, "ok");
 
   try {
     const res = await fetch("/api/runs", {
@@ -215,13 +498,15 @@ async function startRun() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });
-    if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
+    if (!res.ok) {
+      const txt = await res.text();
+      throw new Error(`HTTP ${res.status}: ${txt}`);
+    }
     const { run_id } = await res.json();
     state.currentRun = run_id;
     subscribe(run_id);
   } catch (e) {
-    toast(`Failed to start: ${e.message}`, "error");
-    setStatus("error");
+    setStatus(`Failed to start: ${e.message}`, "error");
     resetRunButton();
   }
 }
@@ -241,19 +526,16 @@ function subscribe(runId) {
     try {
       const data = JSON.parse(e.data);
       const msg = data.message || "stream error";
-      const isKeyIssue = /api key|unauthor|401|403/i.test(msg);
+      const isKeyIssue = /token|api key|unauthor|401|403/i.test(msg);
       const hint = isKeyIssue
-        ? "Paste a valid key in the LLM panel, or try the Oracle / Random investigator — they run locally with no key."
-        : "Try again, or pick Oracle / Random to see the environment work without a key.";
-      toast(msg, "error", { persist: true });
+        ? "Check that your HuggingFace token has Inference permission."
+        : "Try a different model or scenario.";
+      setStatus(msg, "error");
       showStreamBanner(msg, hint);
-      setStatus("error");
       resetRunButton();
       es.close();
       state.eventSource = null;
-    } catch {
-      /* heartbeat */
-    }
+    } catch { /* heartbeat */ }
   });
   es.addEventListener("_eof", () => {
     es.close();
@@ -261,7 +543,7 @@ function subscribe(runId) {
   });
 
   es.onerror = () => {
-    // EventSource auto-reconnects; only treat as fatal if the run is closed server-side.
+    // EventSource auto-reconnects; only treat as fatal if the server closes.
   };
 }
 
@@ -283,10 +565,12 @@ function onStep(ev) {
   const { step, action, reason, observation } = ev;
   const card = document.createElement("div");
   card.className = "step-card";
+  card.tabIndex = 0;
+  card.setAttribute("aria-label",
+    `Step ${step}, action ${action.action_type}, reward ${observation.reward.toFixed(3)}`);
   if (action.action_type === "submit") card.classList.add("terminal");
 
   const newFacts = diffFacts(observation.known_facts);
-  const rewardChip = renderReward(observation.reward);
   const paramsHtml = renderActionParams(action);
 
   card.innerHTML = `
@@ -308,7 +592,6 @@ function onStep(ev) {
   body.appendChild(card);
   body.scrollTop = body.scrollHeight;
 
-  // Wire observation expand toggle
   const obsEl = card.querySelector(".observation");
   const toggle = card.querySelector(".observation-expand");
   if (toggle && obsEl) {
@@ -318,13 +601,9 @@ function onStep(ev) {
     });
   }
 
-  // Animate service graph — light up queried services
   const queriedSvc = action.service;
-  if (queriedSvc) {
-    highlightGraphNode(queriedSvc, "queried");
-  }
+  if (queriedSvc) highlightGraphNode(queriedSvc, "queried");
 
-  // Side panel updates
   const stepsUsed = state.maxSteps - observation.remaining_budget;
   updateBudget(stepsUsed, state.maxSteps);
   updateStats({
@@ -332,7 +611,6 @@ function onStep(ev) {
     wrong: observation.wrong_hypotheses,
   });
 
-  // Capture cause / chain from action payload
   if (action.action_type === "submit") {
     state.cause = action.final_cause;
     state.chain = action.final_chain || [];
@@ -364,28 +642,29 @@ function onUsage(ev) {
 
 function onCurriculum(ev) {
   const sign = ev.agent_elo_delta >= 0 ? "+" : "";
-  toast(`Curriculum: agent ELO ${sign}${ev.agent_elo_delta}, difficulty × ${ev.difficulty_multiplier.toFixed(2)}`,
-        ev.solved ? "ok" : "");
+  setStatus(
+    `Curriculum: agent ELO ${sign}${ev.agent_elo_delta}, difficulty × ${ev.difficulty_multiplier.toFixed(2)}`,
+    ev.solved ? "ok" : ""
+  );
   loadCurriculum();
 }
 
 function onDone(ev) {
   state.groundTruthCause = ev.cause;
   const matched = state.cause && state.cause === ev.cause;
-  if (matched) {
-    $("causeSlot").classList.add("matched");
-  }
+  if (matched) $("causeSlot").classList.add("matched");
   updateScore(ev.score, ev.steps);
-  setStatus(ev.score >= 0.70 ? "done" : "error");
   resetRunButton();
+  setStatus(
+    `Done — score ${ev.score.toFixed(3)} in ${ev.steps} steps.`,
+    ev.score >= 0.70 ? "ok" : "error"
+  );
 
-  // Animate the causal cascade on the service graph
-  if (ev.chain && ev.chain.length) {
-    showCascadeOnGraph(ev.chain, ev.cause);
-  }
+  if (ev.chain && ev.chain.length) showCascadeOnGraph(ev.chain, ev.cause);
 
   const summary = document.createElement("div");
   summary.className = "step-card terminal";
+  summary.tabIndex = 0;
   summary.innerHTML = `
     <div class="step-index">END</div>
     <div class="step-main">
@@ -395,7 +674,7 @@ function onDone(ev) {
       </div>
       <div class="reason">
         ground-truth cause: <span class="action-params">${escapeHtml(ev.cause)}</span>
-        ${ev.usage ? ` · tokens in: ${ev.usage.input_tokens}, cached: ${ev.usage.cache_read_tokens}` : ""}
+        ${ev.usage ? ` · tokens in: ${ev.usage.input_tokens}, out: ${ev.usage.output_tokens}` : ""}
       </div>
     </div>
     <div class="step-reward ${ev.score >= 0.70 ? "ok" : "warn"}">${ev.score.toFixed(3)}</div>
@@ -429,19 +708,15 @@ function renderObservation(text) {
   const collapsed = text.length > 400;
   return `
     <div class="observation ${collapsed ? "collapsed" : ""}">${escapeHtml(text)}</div>
-    ${collapsed ? '<span class="observation-expand">EXPAND</span>' : ""}
+    ${collapsed ? '<span class="observation-expand" tabindex="0" role="button">EXPAND</span>' : ""}
   `;
-}
-
-function renderReward(r) {
-  return `<span class="step-reward">${r.toFixed(3)}</span>`;
 }
 
 function renderCauseAndChain() {
   const slot = $("causeSlot");
   if (state.cause) {
     const ok = state.groundTruthCause && state.cause === state.groundTruthCause;
-    slot.innerHTML = `<span>${escapeHtml(state.cause)}${ok ? '<span class="match-tag">[ MATCH ]</span>' : ""}</span>`;
+    slot.innerHTML = `<span>${escapeHtml(state.cause)}${ok ? '<span class="match-tag">MATCH</span>' : ""}</span>`;
     slot.classList.toggle("matched", !!ok);
   } else {
     slot.innerHTML = '<span class="muted">—</span>';
@@ -458,7 +733,7 @@ function renderCauseAndChain() {
     li.className = "chain-item";
     li.innerHTML = `
       <span class="svc">${escapeHtml(link.service)}</span>
-      <span class="arrow">→</span>
+      <span class="arrow" aria-hidden="true">→</span>
       <span class="effect">${escapeHtml(link.effect)}</span>
     `;
     ol.appendChild(li);
@@ -474,7 +749,6 @@ function renderGraph(graph) {
     return;
   }
 
-  // SVG layout — diamond for the canonical 4-service case, radial otherwise.
   const W = 280, H = 170;
   const diamond = {
     frontend: { x: W/2, y: 20 },
@@ -504,8 +778,12 @@ function renderGraph(graph) {
   const svg = document.createElementNS(svgNS, "svg");
   svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
   svg.classList.add("graph-svg");
+  svg.setAttribute("role", "img");
+  const desc = document.createElementNS(svgNS, "desc");
+  desc.textContent = "Service dependency graph showing " +
+    services.join(", ") + ".";
+  svg.appendChild(desc);
 
-  // Arrowhead marker
   const defs = document.createElementNS(svgNS, "defs");
   const marker = document.createElementNS(svgNS, "marker");
   marker.setAttribute("id", "arrowhead");
@@ -517,12 +795,11 @@ function renderGraph(graph) {
   marker.setAttribute("orient", "auto");
   const arrowPath = document.createElementNS(svgNS, "polygon");
   arrowPath.setAttribute("points", "0 0, 10 3.5, 0 7");
-  arrowPath.setAttribute("fill", "#333");
+  arrowPath.setAttribute("fill", "currentColor");
   marker.appendChild(arrowPath);
   defs.appendChild(marker);
   svg.appendChild(defs);
 
-  // Draw edges
   for (const svc of services) {
     const deps = graph[svc] || [];
     const from = positions[svc] || fallback;
@@ -540,10 +817,8 @@ function renderGraph(graph) {
     }
   }
 
-  // Draw nodes
   const nodeW = 70, nodeH = 24;
-  for (let i = 0; i < services.length; i++) {
-    const svc = services[i];
+  for (const svc of services) {
     const pos = positions[svc] || fallback;
     const g = document.createElementNS(svgNS, "g");
     g.classList.add("svc-group");
@@ -572,7 +847,6 @@ function renderGraph(graph) {
 }
 
 function highlightGraphNode(serviceName, type) {
-  // type: "queried" | "root-cause" | "in-chain"
   const svg = document.querySelector(".graph-svg");
   if (!svg) return;
   const group = svg.querySelector(`.svc-group[data-svc="${serviceName}"]`);
@@ -586,24 +860,18 @@ function highlightGraphEdge(from, to) {
   if (!svg) return;
   const edge = svg.querySelector(`.svc-edge[data-from="${from}"][data-to="${to}"]`);
   if (edge) edge.classList.add("active");
-  // Also check reverse direction
   const rev = svg.querySelector(`.svc-edge[data-from="${to}"][data-to="${from}"]`);
   if (rev) rev.classList.add("active");
 }
 
 function showCascadeOnGraph(chain, cause) {
-  // Highlight root cause node
   if (cause && chain.length > 0) {
-    const rootSvc = chain[0].service;
-    highlightGraphNode(rootSvc, "root-cause");
+    highlightGraphNode(chain[0].service, "root-cause");
   }
-  // Highlight chain nodes and edges with staggered delay
   chain.forEach((link, i) => {
     setTimeout(() => {
       highlightGraphNode(link.service, "in-chain");
-      if (i > 0) {
-        highlightGraphEdge(chain[i-1].service, link.service);
-      }
+      if (i > 0) highlightGraphEdge(chain[i-1].service, link.service);
     }, i * 300);
   });
 }
@@ -633,7 +901,7 @@ function renderSegments(el, value, { over = false } = {}) {
   }
 }
 
-function updateScore(score, steps) {
+function updateScore(score) {
   if (score === null || score === undefined) {
     renderSegments($("scoreFill"), 0);
     $("scoreValue").textContent = "—";
@@ -656,15 +924,24 @@ function updateStats({ facts, wrong, tokensIn, cached }) {
   if (cached !== undefined) $("statCached").textContent = cached;
 }
 
-function setStatus(s) {
-  const pill = $("statusPill");
-  pill.dataset.status = s;
-  pill.querySelector(".status-text").textContent = `[ ${s.toUpperCase()} ]`;
+function setStatus(msg, kind = "") {
+  const el = $("inlineStatus");
+  if (!el) return;
+  el.dataset.kind = kind;
+  el.textContent = msg;
+  clearTimeout(setStatus._timer);
+  if (kind === "error") return; // sticky on error
+  setStatus._timer = setTimeout(() => {
+    if (el.textContent === msg) {
+      el.textContent = "";
+      el.dataset.kind = "";
+    }
+  }, 6000);
 }
 
 function resetRunButton() {
   $("runBtn").disabled = false;
-  $("runBtn").querySelector(".btn-label").textContent = "START INVESTIGATION";
+  $("runBtn").querySelector(".btn-label").textContent = "Run investigation";
 }
 
 function clearStream() {
@@ -676,22 +953,6 @@ function clearEmptyState() {
   if (empty) empty.remove();
 }
 
-function toast(msg, kind = "", opts = {}) {
-  const el = $("inlineStatus");
-  if (!el) return;
-  const prefix = kind === "error" ? "ERROR" : kind === "ok" ? "OK" : "INFO";
-  el.dataset.kind = kind || "info";
-  el.textContent = `[${prefix}] ${msg}`;
-  clearTimeout(toast._timer);
-  if (opts.persist) return;
-  toast._timer = setTimeout(() => {
-    if (el.textContent.includes(msg)) {
-      el.textContent = "";
-      el.dataset.kind = "";
-    }
-  }, 6000);
-}
-
 function showStreamBanner(message, hint) {
   const body = $("streamBody");
   if (!body) return;
@@ -699,7 +960,7 @@ function showStreamBanner(message, hint) {
   const banner = document.createElement("div");
   banner.className = "stream-banner";
   banner.innerHTML = `
-    <div class="stream-banner-label">[ ERROR ]</div>
+    <div class="stream-banner-label">ERROR</div>
     <div class="stream-banner-msg">${escapeHtml(message)}</div>
     ${hint ? `<div class="stream-banner-hint">${escapeHtml(hint)}</div>` : ""}
   `;
@@ -714,4 +975,387 @@ function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, (c) => ({
     "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
   }[c]));
+}
+
+// =============================================================================
+// Live training panel
+// =============================================================================
+//
+// Subscribes to /api/training/stream/{id} and incrementally draws an SVG chart
+// of (rolling-mean reward vs. episode) against the random baseline. Every
+// "Start training" click is a *fresh* on-policy REINFORCE run — there's no
+// pre-recorded curve, the points fill in left-to-right as the policy actually
+// learns. See web/runner.py and web/training_loop.py for the backend.
+
+const SVG_NS = "http://www.w3.org/2000/svg";
+
+const trainingState = {
+  sessionId: null,
+  eventSource: null,
+  nEpisodes: 500,
+  randomBaseline: null,
+  // Each metric event: { episode, score, rolling_mean, lift_over_random, ... }
+  points: [],
+  // Cached chart geometry so we can redraw on resize without re-laying-out.
+  geom: null,
+};
+
+function bindTrainingPanel() {
+  const btn = $("trainingStartBtn");
+  if (!btn) return;
+  btn.addEventListener("click", () => startTraining());
+
+  // Shift+Enter triggers training (matches the run panel's ⌘+Enter UX).
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && e.shiftKey && !(e.metaKey || e.ctrlKey)) {
+      const target = e.target;
+      if (target && target.matches("input,textarea,select,[contenteditable=true]")) {
+        return;
+      }
+      e.preventDefault();
+      startTraining();
+    }
+  });
+
+  // Re-paint the chart on resize so it stays sharp on viewport changes.
+  let resizeRaf = 0;
+  window.addEventListener("resize", () => {
+    if (!trainingState.points.length) return;
+    cancelAnimationFrame(resizeRaf);
+    resizeRaf = requestAnimationFrame(() => paintTrainingChart());
+  });
+}
+
+async function startTraining() {
+  const sel = $("trainingTaskSelect");
+  const epsInput = $("trainingEpsInput");
+  const taskId = sel?.value;
+  if (!taskId) {
+    setTrainingStatus("Pick a task first.", "error");
+    return;
+  }
+  const nEpisodes = clamp(parseInt(epsInput?.value, 10) || 500, 50, 600);
+  if (epsInput) epsInput.value = String(nEpisodes);
+
+  // Tear down any previous run.
+  if (trainingState.eventSource) {
+    trainingState.eventSource.close();
+    trainingState.eventSource = null;
+  }
+  trainingState.points = [];
+  trainingState.randomBaseline = null;
+  trainingState.nEpisodes = nEpisodes;
+  trainingState.sessionId = null;
+
+  resetTrainingSummary();
+  resetTrainingChart();
+  setTrainingStatus("Estimating random baseline…", "");
+
+  const btn = $("trainingStartBtn");
+  if (btn) {
+    btn.disabled = true;
+    const lbl = btn.querySelector(".btn-label");
+    if (lbl) lbl.textContent = "Training…";
+  }
+
+  try {
+    const res = await fetch("/api/training/start", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ task_id: taskId, n_episodes: nEpisodes }),
+    });
+    if (!res.ok) {
+      const txt = await res.text();
+      throw new Error(`HTTP ${res.status}: ${txt}`);
+    }
+    const meta = await res.json();
+    trainingState.sessionId = meta.session_id;
+    trainingState.nEpisodes = meta.n_episodes;
+    const runtimeEl = $("trainingRuntime");
+    if (runtimeEl) runtimeEl.textContent = meta.runtime || "local";
+    subscribeTraining(meta.session_id);
+  } catch (e) {
+    setTrainingStatus(`Failed to start: ${e.message}`, "error");
+    resetTrainingButton();
+  }
+}
+
+function subscribeTraining(sessionId) {
+  const es = new EventSource(`/api/training/stream/${sessionId}`);
+  trainingState.eventSource = es;
+
+  es.addEventListener("baselines", (e) => onTrainingBaselines(JSON.parse(e.data)));
+  es.addEventListener("metric",    (e) => onTrainingMetric(JSON.parse(e.data)));
+  es.addEventListener("done",      (e) => onTrainingDone(JSON.parse(e.data)));
+  es.addEventListener("error",     (e) => {
+    try {
+      const data = JSON.parse(e.data);
+      setTrainingStatus(data.message || "stream error", "error");
+    } catch {/* heartbeat */}
+    resetTrainingButton();
+    es.close();
+    trainingState.eventSource = null;
+  });
+  es.addEventListener("_eof", () => {
+    es.close();
+    trainingState.eventSource = null;
+  });
+  // EventSource auto-reconnects on transient network errors; only the
+  // server-emitted "error" event above is fatal.
+}
+
+function onTrainingBaselines(ev) {
+  trainingState.randomBaseline = ev.random;
+  trainingState.nEpisodes = ev.n_episodes || trainingState.nEpisodes;
+  $("trainingBaseline").textContent = formatScore(ev.random);
+  setTrainingStatus(
+    `Training on ${shortTaskName(ev.task_id)} · ${ev.action_menu_size} actions · ${ev.n_episodes} episodes`,
+    "ok",
+  );
+  paintTrainingChart();
+}
+
+function onTrainingMetric(ev) {
+  trainingState.points.push(ev);
+  $("trainingEpisodeNow").textContent = `${ev.episode} / ${trainingState.nEpisodes}`;
+  $("trainingRolling").textContent = formatScore(ev.rolling_mean);
+  const lift = ev.lift_over_random;
+  const liftEl = $("trainingLift");
+  liftEl.textContent = `${lift >= 0 ? "+" : ""}${lift.toFixed(3)}`;
+  liftEl.classList.toggle("negative", lift < 0);
+  paintTrainingChart();
+}
+
+function onTrainingDone(ev) {
+  const lift = ev.lift_over_random;
+  const sign = lift >= 0 ? "+" : "";
+  setTrainingStatus(
+    `Done — final rolling mean ${ev.final_rolling_mean.toFixed(3)} (${sign}${lift.toFixed(3)} vs random) over ${ev.n_episodes} episodes.`,
+    lift > 0.05 ? "ok" : "",
+  );
+  resetTrainingButton();
+  paintTrainingChart(/* terminal */ true);
+}
+
+// ---------- chart ----------------------------------------------------------
+
+function resetTrainingChart() {
+  const host = $("trainingChart");
+  if (!host) return;
+  host.classList.remove("has-data");
+  // Keep the empty-state node, drop any prior svg.
+  Array.from(host.querySelectorAll("svg")).forEach((s) => s.remove());
+}
+
+function resetTrainingSummary() {
+  $("trainingEpisodeNow").textContent = `0 / ${trainingState.nEpisodes}`;
+  $("trainingBaseline").textContent = "—";
+  $("trainingRolling").textContent = "—";
+  const liftEl = $("trainingLift");
+  liftEl.textContent = "—";
+  liftEl.classList.remove("negative");
+}
+
+function paintTrainingChart(terminal = false) {
+  const host = $("trainingChart");
+  if (!host) return;
+  const points = trainingState.points;
+  const baseline = trainingState.randomBaseline;
+  if (!points.length && baseline === null) return;
+
+  host.classList.add("has-data");
+
+  // Layout: pad room for axis labels on left + bottom.
+  const rect = host.getBoundingClientRect();
+  const W = Math.max(420, Math.floor(rect.width - 36));
+  const H = 320;
+  const pad = { top: 18, right: 24, bottom: 36, left: 44 };
+  const innerW = W - pad.left - pad.right;
+  const innerH = H - pad.top - pad.bottom;
+
+  const xMax = Math.max(trainingState.nEpisodes, 1);
+  // Y-axis fixed 0..1 — env reward is bounded, and a fixed scale lets the
+  // viewer see the curve climb toward the ceiling instead of having the
+  // axis auto-rescale and hide progress.
+  const yMin = 0, yMax = 1;
+
+  const xOf = (ep) => pad.left + (ep / xMax) * innerW;
+  const yOf = (s) => pad.top + (1 - (s - yMin) / (yMax - yMin)) * innerH;
+
+  // (Re)build the SVG from scratch each repaint. The chart is small (≤500
+  // points) so this is cheaper than a diff renderer and keeps the code
+  // legible.
+  const svg = document.createElementNS(SVG_NS, "svg");
+  svg.classList.add("training-chart-svg");
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  svg.setAttribute("preserveAspectRatio", "none");
+  svg.setAttribute("role", "img");
+
+  appendGridAndAxes(svg, pad, innerW, innerH, xMax, yMin, yMax);
+
+  if (baseline !== null && Number.isFinite(baseline)) {
+    const yb = yOf(baseline);
+    const line = document.createElementNS(SVG_NS, "line");
+    line.classList.add("training-baseline-line");
+    line.setAttribute("x1", pad.left);
+    line.setAttribute("x2", pad.left + innerW);
+    line.setAttribute("y1", yb);
+    line.setAttribute("y2", yb);
+    svg.appendChild(line);
+
+    const lbl = document.createElementNS(SVG_NS, "text");
+    lbl.classList.add("training-baseline-label");
+    lbl.setAttribute("x", pad.left + innerW - 6);
+    lbl.setAttribute("y", yb - 6);
+    lbl.setAttribute("text-anchor", "end");
+    lbl.textContent = `random ${baseline.toFixed(3)}`;
+    svg.appendChild(lbl);
+  }
+
+  if (points.length) {
+    // Raw per-episode dots (low-opacity primary).
+    const rawG = document.createElementNS(SVG_NS, "g");
+    rawG.classList.add("training-raw-points");
+    for (const p of points) {
+      const c = document.createElementNS(SVG_NS, "circle");
+      c.setAttribute("cx", xOf(p.episode));
+      c.setAttribute("cy", yOf(p.score));
+      c.setAttribute("r", 1.6);
+      rawG.appendChild(c);
+    }
+    svg.appendChild(rawG);
+
+    // Trained-policy rolling-mean line + soft fill underneath.
+    const linePts = points
+      .map((p) => `${xOf(p.episode).toFixed(2)},${yOf(p.rolling_mean).toFixed(2)}`)
+      .join(" ");
+    const last = points[points.length - 1];
+
+    const area = document.createElementNS(SVG_NS, "polygon");
+    area.classList.add("training-trained-area");
+    const xFirst = xOf(points[0].episode).toFixed(2);
+    const xLast = xOf(last.episode).toFixed(2);
+    const yFloor = (pad.top + innerH).toFixed(2);
+    area.setAttribute("points", `${xFirst},${yFloor} ${linePts} ${xLast},${yFloor}`);
+    svg.appendChild(area);
+
+    const line = document.createElementNS(SVG_NS, "polyline");
+    line.classList.add("training-trained-line");
+    line.setAttribute("points", linePts);
+    svg.appendChild(line);
+
+    // Current-position marker — small primary dot at the latest rolling mean.
+    const dot = document.createElementNS(SVG_NS, "circle");
+    dot.classList.add("training-current-marker");
+    dot.setAttribute("cx", xOf(last.episode));
+    dot.setAttribute("cy", yOf(last.rolling_mean));
+    dot.setAttribute("r", terminal ? 4 : 3);
+    svg.appendChild(dot);
+  }
+
+  // Replace any prior svg in-place.
+  Array.from(host.querySelectorAll("svg")).forEach((s) => s.remove());
+  host.appendChild(svg);
+}
+
+function appendGridAndAxes(svg, pad, innerW, innerH, xMax, yMin, yMax) {
+  const grid = document.createElementNS(SVG_NS, "g");
+  grid.classList.add("training-grid");
+
+  const Y_TICKS = [0, 0.25, 0.5, 0.75, 1.0];
+  for (const t of Y_TICKS) {
+    const y = pad.top + (1 - (t - yMin) / (yMax - yMin)) * innerH;
+    const ln = document.createElementNS(SVG_NS, "line");
+    ln.setAttribute("x1", pad.left);
+    ln.setAttribute("x2", pad.left + innerW);
+    ln.setAttribute("y1", y);
+    ln.setAttribute("y2", y);
+    grid.appendChild(ln);
+  }
+  svg.appendChild(grid);
+
+  const axis = document.createElementNS(SVG_NS, "g");
+  axis.classList.add("training-axis");
+
+  const yAx = document.createElementNS(SVG_NS, "line");
+  yAx.setAttribute("x1", pad.left);
+  yAx.setAttribute("x2", pad.left);
+  yAx.setAttribute("y1", pad.top);
+  yAx.setAttribute("y2", pad.top + innerH);
+  axis.appendChild(yAx);
+
+  for (const t of Y_TICKS) {
+    const y = pad.top + (1 - (t - yMin) / (yMax - yMin)) * innerH;
+    const tx = document.createElementNS(SVG_NS, "text");
+    tx.setAttribute("x", pad.left - 8);
+    tx.setAttribute("y", y + 3);
+    tx.setAttribute("text-anchor", "end");
+    tx.textContent = t.toFixed(2);
+    axis.appendChild(tx);
+  }
+
+  const xAx = document.createElementNS(SVG_NS, "line");
+  xAx.setAttribute("x1", pad.left);
+  xAx.setAttribute("x2", pad.left + innerW);
+  xAx.setAttribute("y1", pad.top + innerH);
+  xAx.setAttribute("y2", pad.top + innerH);
+  axis.appendChild(xAx);
+
+  // ~5-6 evenly spaced episode ticks.
+  const N = 5;
+  for (let i = 0; i <= N; i++) {
+    const ep = Math.round((xMax * i) / N);
+    const x = pad.left + (ep / xMax) * innerW;
+    const tx = document.createElementNS(SVG_NS, "text");
+    tx.setAttribute("x", x);
+    tx.setAttribute("y", pad.top + innerH + 16);
+    tx.setAttribute("text-anchor", "middle");
+    tx.textContent = String(ep);
+    axis.appendChild(tx);
+  }
+
+  // Axis labels.
+  const yLabel = document.createElementNS(SVG_NS, "text");
+  yLabel.setAttribute("x", 12);
+  yLabel.setAttribute("y", pad.top + innerH / 2);
+  yLabel.setAttribute("text-anchor", "middle");
+  yLabel.setAttribute("transform", `rotate(-90, 12, ${pad.top + innerH / 2})`);
+  yLabel.textContent = "score";
+  axis.appendChild(yLabel);
+
+  const xLabel = document.createElementNS(SVG_NS, "text");
+  xLabel.setAttribute("x", pad.left + innerW / 2);
+  xLabel.setAttribute("y", pad.top + innerH + 30);
+  xLabel.setAttribute("text-anchor", "middle");
+  xLabel.textContent = "episode";
+  axis.appendChild(xLabel);
+
+  svg.appendChild(axis);
+}
+
+// ---------- helpers --------------------------------------------------------
+
+function setTrainingStatus(msg, kind = "") {
+  const el = $("trainingStatus");
+  if (!el) return;
+  el.dataset.kind = kind;
+  el.textContent = msg;
+}
+
+function resetTrainingButton() {
+  const btn = $("trainingStartBtn");
+  if (!btn) return;
+  btn.disabled = false;
+  const lbl = btn.querySelector(".btn-label");
+  if (lbl) lbl.textContent = "Start training";
+}
+
+function formatScore(v) {
+  if (v === null || v === undefined || !Number.isFinite(v)) return "—";
+  return v.toFixed(3);
+}
+
+function clamp(v, lo, hi) {
+  if (!Number.isFinite(v)) return lo;
+  return Math.max(lo, Math.min(hi, v));
 }

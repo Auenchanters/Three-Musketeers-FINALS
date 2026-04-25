@@ -1,0 +1,167 @@
+{
+  "task_id": "task4_multi_region_failover",
+  "task_difficulty": "hard",
+  "task_description": "On 2026-04-19 starting at 09:00 UTC, frontend-us users began seeing intermittent 401 'token invalid' errors lasting roughly 90 seconds out of every hour, on the hour. The 12-service architecture spans two regions (us-east, eu-west) with two AZs each. Both regions share a global JWT signing key. SLO error budget is being burned at 4x the normal rate. Most engineers initially blamed DNS TTL refresh — the timing matches DNS update cycles to the second. The rolling failures clear on their own and never repro deterministically in staging. Identify the COMBINED root cause (it is correlated: a recent code change interacting with a routine infrastructure rhythm) AND reconstruct the causal chain.",
+  "max_steps": 120,
+  "service_graph": {
+    "frontend-us": ["auth-us", "cdn-us"],
+    "frontend-eu": ["auth-eu", "cdn-eu"],
+    "auth-us": ["dns-resolver", "clock-sync", "auth-eu"],
+    "auth-eu": ["dns-resolver", "clock-sync", "data-eu-1a"],
+    "data-us-1a": ["data-us-1b"],
+    "data-us-1b": [],
+    "data-eu-1a": ["data-eu-1b"],
+    "data-eu-1b": [],
+    "cdn-us": [],
+    "cdn-eu": [],
+    "dns-resolver": [],
+    "clock-sync": []
+  },
+  "services": [
+    {"name": "frontend-us", "status": "degraded", "dependencies": ["auth-us", "cdn-us"], "recent_deploy_count": 2, "error_rate_during_incident": 8.4},
+    {"name": "frontend-eu", "status": "healthy", "dependencies": ["auth-eu", "cdn-eu"], "recent_deploy_count": 1, "error_rate_during_incident": 0.6},
+    {"name": "auth-us", "status": "degraded", "dependencies": ["dns-resolver", "clock-sync", "auth-eu"], "recent_deploy_count": 2, "error_rate_during_incident": 12.7},
+    {"name": "auth-eu", "status": "degraded", "dependencies": ["dns-resolver", "clock-sync", "data-eu-1a"], "recent_deploy_count": 3, "error_rate_during_incident": 31.2},
+    {"name": "data-us-1a", "status": "healthy", "dependencies": ["data-us-1b"], "recent_deploy_count": 0, "error_rate_during_incident": 0.2},
+    {"name": "data-us-1b", "status": "healthy", "dependencies": [], "recent_deploy_count": 0, "error_rate_during_incident": 0.1},
+    {"name": "data-eu-1a", "status": "healthy", "dependencies": ["data-eu-1b"], "recent_deploy_count": 0, "error_rate_during_incident": 0.1},
+    {"name": "data-eu-1b", "status": "healthy", "dependencies": [], "recent_deploy_count": 0, "error_rate_during_incident": 0.1},
+    {"name": "cdn-us", "status": "healthy", "dependencies": [], "recent_deploy_count": 0, "error_rate_during_incident": 0.0},
+    {"name": "cdn-eu", "status": "healthy", "dependencies": [], "recent_deploy_count": 0, "error_rate_during_incident": 0.0},
+    {"name": "dns-resolver", "status": "healthy", "dependencies": [], "recent_deploy_count": 0, "error_rate_during_incident": 0.3},
+    {"name": "clock-sync", "status": "degraded", "dependencies": [], "recent_deploy_count": 0, "error_rate_during_incident": 0.4}
+  ],
+  "incident_window": {
+    "start": "2026-04-19T09:00:00Z",
+    "end": "2026-04-19T13:00:00Z"
+  },
+  "logs": {
+    "frontend-us": [
+      {"id": "log-feus-001", "timestamp": "2026-04-19T08:55:00Z", "level": "INFO", "message": "Health check passed, all auth round-trips < 80ms", "relevant": false},
+      {"id": "log-feus-002", "timestamp": "2026-04-19T09:00:12Z", "level": "ERROR", "message": "Spike in 401 'token invalid' from /api/v1/* — 412 errors in 30s window across multiple users", "relevant": true},
+      {"id": "log-feus-003", "timestamp": "2026-04-19T09:01:30Z", "level": "WARN", "message": "Error rate normalising — 401s clearing without intervention", "relevant": true},
+      {"id": "log-feus-004", "timestamp": "2026-04-19T10:00:08Z", "level": "ERROR", "message": "Second wave of 401 'token invalid' errors, identical signature to 09:00 wave (~90s window)", "relevant": true},
+      {"id": "log-feus-005", "timestamp": "2026-04-19T11:00:05Z", "level": "ERROR", "message": "Third wave of 401s, same hourly pattern. Slack flooded with 'is something on fire?'", "relevant": true},
+      {"id": "log-feus-006", "timestamp": "2026-04-19T11:01:40Z", "level": "INFO", "message": "Pattern: 90 second errors at the top of each hour, then clean for 58 minutes", "relevant": true},
+      {"id": "log-feus-007", "timestamp": "2026-04-19T12:00:10Z", "level": "ERROR", "message": "Fourth wave. Sampled JWT shows iat=09:59:55Z, region=us-east, validated by region=eu-west pod auth-eu-7. SkewRejectError logged.", "relevant": true},
+      {"id": "log-feus-008", "timestamp": "2026-04-19T07:00:00Z", "level": "INFO", "message": "Routine deployment frontend-us v4.2.3 — minor copy update", "relevant": false}
+    ],
+    "frontend-eu": [
+      {"id": "log-feeu-001", "timestamp": "2026-04-19T08:00:00Z", "level": "INFO", "message": "Latency p99 stable at 110ms. No anomalies.", "relevant": false},
+      {"id": "log-feeu-002", "timestamp": "2026-04-19T09:00:30Z", "level": "INFO", "message": "EU-originated traffic unaffected. All token validations passing.", "relevant": true},
+      {"id": "log-feeu-003", "timestamp": "2026-04-19T11:00:00Z", "level": "INFO", "message": "Health check passed, no spike in 401s on EU origin paths.", "relevant": true}
+    ],
+    "auth-us": [
+      {"id": "log-authus-001", "timestamp": "2026-04-19T08:30:00Z", "level": "INFO", "message": "Issued 18432 JWTs in last 30m, all standard 1h TTL, region=us-east", "relevant": false},
+      {"id": "log-authus-002", "timestamp": "2026-04-19T09:00:00Z", "level": "INFO", "message": "Routine cross-region federation: forwarding 8% of validations to auth-eu (load balancing)", "relevant": true},
+      {"id": "log-authus-003", "timestamp": "2026-04-19T09:00:15Z", "level": "WARN", "message": "Federation responses from auth-eu returning 401 SkewRejectError on tokens we just minted with iat~now-2s", "relevant": true},
+      {"id": "log-authus-004", "timestamp": "2026-04-19T09:01:00Z", "level": "INFO", "message": "auth-eu federation back to nominal — 200 OK on validations", "relevant": true},
+      {"id": "log-authus-005", "timestamp": "2026-04-19T10:00:20Z", "level": "WARN", "message": "Same 401 SkewReject pattern from auth-eu federation: hits us at the top of the hour for ~90s", "relevant": true}
+    ],
+    "auth-eu": [
+      {"id": "log-autheu-001", "timestamp": "2026-04-19T06:00:00Z", "level": "INFO", "message": "Deployment auth-eu v3.1.0 — tighten JWT clock-skew tolerance from 300s to 5s for compliance audit (PR #4421)", "relevant": true},
+      {"id": "log-autheu-002", "timestamp": "2026-04-19T09:00:18Z", "level": "ERROR", "message": "JWT validation REJECTED — SkewRejectError: token iat=2026-04-19T08:59:53Z, local clock=2026-04-19T09:00:01Z, drift=8s exceeds tolerance=5s. Token from region=us-east", "relevant": true},
+      {"id": "log-autheu-003", "timestamp": "2026-04-19T09:00:19Z", "level": "ERROR", "message": "Burst: 387 SkewRejectError in 12s, all on us-east tokens, drift range 6-14s", "relevant": true},
+      {"id": "log-autheu-004", "timestamp": "2026-04-19T09:01:30Z", "level": "INFO", "message": "SkewReject burst cleared. Local clock realigned via NTP step. Drift=0.4s.", "relevant": true},
+      {"id": "log-autheu-005", "timestamp": "2026-04-19T10:00:12Z", "level": "ERROR", "message": "SkewRejectError burst: 412 us-east tokens rejected, drift 7-15s. Same pattern as 09:00.", "relevant": true},
+      {"id": "log-autheu-006", "timestamp": "2026-04-19T10:01:45Z", "level": "INFO", "message": "Local NTP step completed, clock drift back to <1s. Tokens validating again.", "relevant": true},
+      {"id": "log-autheu-007", "timestamp": "2026-04-19T08:55:00Z", "level": "INFO", "message": "Pre-incident NTP poll: clock-sync slew correction applied (-3.2s), drift now 0.6s", "relevant": false},
+      {"id": "log-autheu-008", "timestamp": "2026-04-19T11:00:08Z", "level": "ERROR", "message": "SkewRejectError burst x3, same hourly pattern. Tightened tolerance is rejecting tokens during NTP slew window.", "relevant": true}
+    ],
+    "data-us-1a": [
+      {"id": "log-datus-001", "timestamp": "2026-04-19T09:00:00Z", "level": "INFO", "message": "Read p99 = 8ms, write p99 = 14ms. Healthy.", "relevant": false}
+    ],
+    "data-us-1b": [
+      {"id": "log-datus1b-001", "timestamp": "2026-04-19T09:00:00Z", "level": "INFO", "message": "Replica lag 12ms, well within budget.", "relevant": false}
+    ],
+    "data-eu-1a": [
+      {"id": "log-dateu-001", "timestamp": "2026-04-19T09:00:00Z", "level": "INFO", "message": "Read p99 = 9ms, write p99 = 16ms. Healthy.", "relevant": false}
+    ],
+    "data-eu-1b": [
+      {"id": "log-dateu1b-001", "timestamp": "2026-04-19T09:00:00Z", "level": "INFO", "message": "Replica lag 14ms, well within budget.", "relevant": false}
+    ],
+    "cdn-us": [
+      {"id": "log-cdnus-001", "timestamp": "2026-04-19T09:00:00Z", "level": "INFO", "message": "Edge cache hit rate 94.2%, no anomalies.", "relevant": false}
+    ],
+    "cdn-eu": [
+      {"id": "log-cdneu-001", "timestamp": "2026-04-19T09:00:00Z", "level": "INFO", "message": "Edge cache hit rate 93.8%, no anomalies.", "relevant": false}
+    ],
+    "dns-resolver": [
+      {"id": "log-dns-001", "timestamp": "2026-04-19T09:00:00Z", "level": "INFO", "message": "Hourly DNS TTL refresh window started for *.auth.internal (TTL=60s, ~90s propagation)", "relevant": true},
+      {"id": "log-dns-002", "timestamp": "2026-04-19T09:01:30Z", "level": "INFO", "message": "DNS TTL refresh complete. All resolver caches reseeded.", "relevant": true},
+      {"id": "log-dns-003", "timestamp": "2026-04-19T10:00:00Z", "level": "INFO", "message": "Hourly DNS TTL refresh window started — same pattern as every hour", "relevant": true}
+    ],
+    "clock-sync": [
+      {"id": "log-clk-001", "timestamp": "2026-04-19T08:55:00Z", "level": "INFO", "message": "NTP poll cycle: us-east pool drift -0.4s, eu-west pool drift +5.8s pre-correction", "relevant": true},
+      {"id": "log-clk-002", "timestamp": "2026-04-19T09:00:30Z", "level": "WARN", "message": "eu-west clock-sync slew in progress: applying -7.2s correction over 90s window. Local clocks will read ahead of true time during slew.", "relevant": true},
+      {"id": "log-clk-003", "timestamp": "2026-04-19T09:01:50Z", "level": "INFO", "message": "eu-west slew correction complete. Drift now 0.3s.", "relevant": true},
+      {"id": "log-clk-004", "timestamp": "2026-04-19T10:00:25Z", "level": "WARN", "message": "Hourly NTP poll: eu-west pool drift +6.4s pre-correction, slewing now.", "relevant": true}
+    ]
+  },
+  "traces": [
+    {"trace_id": "trace-mr-001", "timestamp": "2026-04-19T09:00:18Z", "spans": [
+      {"service": "frontend-us", "operation": "GET /api/v1/profile", "duration_ms": 142, "status": "ERROR", "error": "401 token invalid"},
+      {"service": "auth-us", "operation": "/internal/jwt/federate", "duration_ms": 95, "status": "ERROR", "error": "auth-eu returned SkewRejectError on us-region token"},
+      {"service": "auth-eu", "operation": "/internal/jwt/validate", "duration_ms": 12, "status": "ERROR", "error": "SkewRejectError: drift 8s > tolerance 5s"}
+    ], "relevant": true},
+    {"trace_id": "trace-mr-002", "timestamp": "2026-04-19T09:00:55Z", "spans": [
+      {"service": "frontend-us", "operation": "POST /api/v1/checkout", "duration_ms": 138, "status": "ERROR", "error": "401 token invalid"},
+      {"service": "auth-us", "operation": "/internal/jwt/federate", "duration_ms": 88, "status": "ERROR", "error": "auth-eu SkewRejectError"}
+    ], "relevant": true},
+    {"trace_id": "trace-mr-003", "timestamp": "2026-04-19T09:30:00Z", "spans": [
+      {"service": "frontend-us", "operation": "GET /api/v1/profile", "duration_ms": 92, "status": "OK"},
+      {"service": "auth-us", "operation": "/internal/jwt/federate", "duration_ms": 41, "status": "OK"},
+      {"service": "auth-eu", "operation": "/internal/jwt/validate", "duration_ms": 8, "status": "OK"}
+    ], "relevant": false},
+    {"trace_id": "trace-mr-004", "timestamp": "2026-04-19T10:00:35Z", "spans": [
+      {"service": "frontend-us", "operation": "GET /api/v1/dashboard", "duration_ms": 145, "status": "ERROR", "error": "401 token invalid"},
+      {"service": "auth-us", "operation": "/internal/jwt/federate", "duration_ms": 92, "status": "ERROR", "error": "auth-eu SkewRejectError, drift=11s"},
+      {"service": "auth-eu", "operation": "/internal/jwt/validate", "duration_ms": 14, "status": "ERROR", "error": "SkewRejectError: drift 11s > tolerance 5s"}
+    ], "relevant": true},
+    {"trace_id": "trace-mr-005", "timestamp": "2026-04-19T08:30:00Z", "spans": [
+      {"service": "frontend-eu", "operation": "GET /api/v1/profile", "duration_ms": 105, "status": "OK"},
+      {"service": "auth-eu", "operation": "/internal/jwt/validate", "duration_ms": 9, "status": "OK"}
+    ], "relevant": false}
+  ],
+  "commits": [
+    {"hash": "commit-autheu-jwt-skew", "service": "auth-eu", "timestamp": "2026-04-19T05:55:00Z", "author": "priya@company.com", "message": "security: tighten JWT clock-skew tolerance from 300s to 5s per compliance audit", "diff": "--- a/auth-eu/jwt/validate.go\n+++ b/auth-eu/jwt/validate.go\n@@ -42,7 +42,7 @@\n func ValidateToken(t *jwt.Token, now time.Time) error {\n-    const skewTolerance = 300 * time.Second\n+    const skewTolerance = 5 * time.Second\n     drift := now.Sub(t.IssuedAt).Abs()\n     if drift > skewTolerance {\n         return SkewRejectError{Drift: drift, Tolerance: skewTolerance}\n     }\n     return nil\n }", "relevant": true},
+    {"hash": "commit-autheu-logfmt", "service": "auth-eu", "timestamp": "2026-04-19T04:00:00Z", "author": "priya@company.com", "message": "chore: switch auth-eu structured log format to JSON", "diff": "--- a/auth-eu/logging/format.go\n+log.SetFormatter(&log.JSONFormatter{})", "relevant": false},
+    {"hash": "commit-autheu-metrics", "service": "auth-eu", "timestamp": "2026-04-18T22:00:00Z", "author": "kenji@company.com", "message": "feat: emit per-region JWT validation metrics", "diff": "--- a/auth-eu/metrics/jwt.go\n+jwtValidations.WithLabelValues(region).Inc()", "relevant": false},
+    {"hash": "commit-authus-fed", "service": "auth-us", "timestamp": "2026-04-18T20:00:00Z", "author": "kenji@company.com", "message": "feat: increase auth-eu federation share from 5% to 8% for latency budget", "diff": "--- a/auth-us/federation/router.go\n+const eufederationFraction = 0.08", "relevant": false},
+    {"hash": "commit-feus-copy", "service": "frontend-us", "timestamp": "2026-04-19T07:00:00Z", "author": "alex@company.com", "message": "chore: update homepage hero copy", "diff": "--- a/frontend-us/src/Hero.tsx\n+<h1>The fastest checkout in retail</h1>", "relevant": false}
+  ],
+  "config_changes": [
+    {"config_id": "cfg-mr-001", "service": "auth-eu", "timestamp": "2026-04-19T05:55:00Z", "key": "JWT_CLOCK_SKEW_TOLERANCE_SEC", "old_value": "300", "new_value": "5", "description": "Tightened JWT clock-skew tolerance per compliance audit. Sibling commit-autheu-jwt-skew.", "relevant": true},
+    {"config_id": "cfg-mr-002", "service": "dns-resolver", "timestamp": "2026-04-15T00:00:00Z", "key": "AUTH_RECORD_TTL_SEC", "old_value": "60", "new_value": "60", "description": "DNS TTL for *.auth.internal. Refresh window ~90s every hour, unchanged for months.", "relevant": false},
+    {"config_id": "cfg-mr-003", "service": "clock-sync", "timestamp": "2026-04-15T00:00:00Z", "key": "NTP_POLL_INTERVAL_MIN", "old_value": "60", "new_value": "60", "description": "Hourly NTP poll, slew correction applied each cycle. Steady-state for 6 months.", "relevant": false}
+  ],
+  "infra_events": [
+    {"event_id": "infra-mr-001", "timestamp": "2026-04-19T09:00:00Z", "type": "dns_update", "description": "Hourly DNS TTL refresh window for *.auth.internal. ~90s propagation. This is a routine cycle that has run every hour for 6+ months.", "relevant": true},
+    {"event_id": "infra-mr-002", "timestamp": "2026-04-19T09:00:30Z", "type": "ntp_slew", "description": "eu-west clock-sync NTP slew correction: -7.2s applied over a 90s window. During the slew, eu-west local clocks read AHEAD of true time, then converge.", "relevant": true},
+    {"event_id": "infra-mr-003", "timestamp": "2026-04-19T10:00:00Z", "type": "dns_update", "description": "Second hourly DNS TTL refresh window — same pattern.", "relevant": false},
+    {"event_id": "infra-mr-004", "timestamp": "2026-04-18T03:00:00Z", "type": "scaling", "description": "Routine pre-business-hours scaling: +2 pods per region.", "relevant": false}
+  ],
+  "relevant_fact_ids": [
+    "log-feus-002", "log-feus-004", "log-feus-005", "log-feus-006", "log-feus-007",
+    "log-authus-002", "log-authus-003", "log-authus-005",
+    "log-autheu-001", "log-autheu-002", "log-autheu-003", "log-autheu-005", "log-autheu-008",
+    "log-clk-002", "log-clk-004",
+    "log-dns-001",
+    "commit-autheu-jwt-skew",
+    "cfg-mr-001",
+    "infra-mr-001", "infra-mr-002",
+    "trace-mr-001", "trace-mr-004"
+  ],
+  "ground_truth": {
+    "cause": "commit-autheu-jwt-skew+infra-mr-002",
+    "cause_type": "correlated",
+    "contributing_causes": ["commit-autheu-jwt-skew", "infra-mr-002", "infra-mr-001"],
+    "explanation": "The auth-eu JWT validator's clock-skew tolerance was reduced from 300s to 5s in commit-autheu-jwt-skew (a compliance-audit-driven hardening). Independently, eu-west's NTP slew correction (infra-mr-002) runs once per hour and during a ~90s window the local clock drifts 6-14s ahead of true time. Before the commit, the 300s tolerance absorbed the slew without anyone noticing. After the commit, the 5s tolerance rejects the 6-14s drift, so any us-region JWT federated to an eu-west pod during the slew window fails with SkewRejectError. The correlation with the DNS TTL refresh window (infra-mr-001) is a red herring — both routines happen at the top of every hour, so the symptom timing 'looks like DNS' but the cause is clock skew interacting with the new tolerance. Neither the commit nor the slew is harmful alone; only their interaction produces the failure.",
+    "chain": [
+      {"service": "clock-sync", "effect": "ntp_slew_window_drifts_eu_clocks_ahead"},
+      {"service": "auth-eu", "effect": "tightened_skew_tolerance_rejects_us_tokens"},
+      {"service": "auth-us", "effect": "federation_round_trip_returns_401"},
+      {"service": "frontend-us", "effect": "intermittent_token_invalid_user_facing"}
+    ]
+  }
+}
