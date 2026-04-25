@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -31,7 +32,8 @@ from pydantic import BaseModel
 from data.generator import get_all_tasks
 from engine.environment import PostmortemEnvironment
 from web import curriculum
-from web.agents import LLMAgent, OracleAgent, RandomAgent
+from web.agents import HFInferenceAgent, LLMAgent, OracleAgent, RandomAgent
+from web.models_registry import MODELS, get_model, public_list
 
 RUNS_DIR = Path(__file__).resolve().parent.parent / "training_data" / "runs"
 MAX_RUNS = 50
@@ -97,11 +99,14 @@ _store = _RunStore()
 
 
 class StartRunBody(BaseModel):
-    agent: str = "oracle"  # oracle | random | llm
+    agent: str = "oracle"  # oracle | random | llm | hf
     task_id: str = "task1_recent_deploy"
     provider: str | None = None
     model: str | None = None
     api_key: str | None = None
+    # New fields for the HF-powered model dropdown:
+    model_id: str | None = None  # registry id, e.g. "qwen2.5-7b-instruct"
+    hf_token: str | None = None  # required for paid-tier models
 
 
 class StartRunResponse(BaseModel):
@@ -121,6 +126,35 @@ def _make_agent(body: StartRunBody):
         return OracleAgent()
     if kind == "random":
         return RandomAgent()
+    if kind == "hf" or (kind == "llm" and body.model_id):
+        info = get_model(body.model_id or "")
+        if info is None:
+            raise HTTPException(
+                400, f"Unknown model_id: {body.model_id!r}. See GET /api/models."
+            )
+        if info.tier == "free":
+            server_token = os.environ.get("HF_TOKEN") or os.environ.get(
+                "HUGGINGFACE_TOKEN"
+            )
+            if not server_token:
+                raise HTTPException(
+                    503,
+                    "Free tier disabled on this deployment: set HF_TOKEN on the "
+                    "server, or pick a paid model and supply your own HF token.",
+                )
+            return HFInferenceAgent(
+                repo=info.repo, token=server_token, model_id=info.id
+            )
+        # paid tier — user must bring their own token
+        if not body.hf_token:
+            raise HTTPException(
+                400,
+                f"Model {info.display_name!r} is paid-tier (~${info.est_cost_usd:.2f}/run) "
+                "and requires your own HF token. Paste one in the credential card.",
+            )
+        return HFInferenceAgent(
+            repo=info.repo, token=body.hf_token, model_id=info.id
+        )
     if kind == "llm":
         return LLMAgent(provider=body.provider, model=body.model, api_key=body.api_key)
     raise HTTPException(400, f"Unknown agent type: {body.agent}")
@@ -256,6 +290,26 @@ async def list_tasks() -> JSONResponse:
     return JSONResponse(items)
 
 
+@router.get("/models")
+async def list_models() -> JSONResponse:
+    """Return the curated model registry for the UI dropdown.
+
+    Each entry includes a `free_tier_available` flag: false for free-tier
+    models when the server has no HF_TOKEN configured, telling the UI to
+    show a "bring your own HF token" banner instead of letting users press
+    Run with no fallback.
+    """
+    has_server_token = bool(
+        os.environ.get("HF_TOKEN") or os.environ.get("HUGGINGFACE_TOKEN")
+    )
+    return JSONResponse(
+        {
+            "models": public_list(free_tier_available=has_server_token),
+            "free_tier_available": has_server_token,
+        }
+    )
+
+
 @router.get("/curriculum")
 async def get_curriculum() -> JSONResponse:
     return JSONResponse(curriculum.load_state())
@@ -287,9 +341,12 @@ async def get_run(run_id: str) -> JSONResponse:
 @router.post("/runs")
 async def start_run(body: StartRunBody) -> StartRunResponse:
     agent = _make_agent(body)
-    run = await _store.create(body.agent, body.task_id)
+    # Display name for the recent-runs panel: prefer the registry id when
+    # the user picked a model, fall back to the raw agent kind otherwise.
+    display_kind = body.model_id or body.agent
+    run = await _store.create(display_kind, body.task_id)
     asyncio.create_task(_run_agent(run, agent, body.task_id))
-    return StartRunResponse(run_id=run.run_id, agent=body.agent, task_id=body.task_id)
+    return StartRunResponse(run_id=run.run_id, agent=display_kind, task_id=body.task_id)
 
 
 @router.get("/stream/{run_id}")

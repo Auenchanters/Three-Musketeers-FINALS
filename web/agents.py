@@ -530,3 +530,153 @@ def _parse_action_json(raw: str) -> dict[str, Any]:
         raise ValueError("no JSON object found")
     candidate = s[start : end + 1]
     return json.loads(candidate)
+
+
+# ---------------------------------------------------------------------------
+# HuggingFace Inference agent
+# ---------------------------------------------------------------------------
+
+
+class HFInferenceAgent:
+    """Investigator backed by the HuggingFace Inference API.
+
+    Used by the new model dropdown. Free-tier models route through the
+    server's HF token; paid-tier models use a token the user supplies.
+    Mirrors LLMAgent.run() so the UI sees the same event shapes.
+    """
+
+    def __init__(
+        self,
+        repo: str,
+        token: str,
+        max_tokens: int = 220,
+        model_id: str | None = None,
+    ) -> None:
+        self.repo = repo
+        self.token = token
+        self.max_tokens = max_tokens
+        self.agent_id = f"hf:{model_id or repo}"
+
+    async def run(
+        self, env: PostmortemEnvironment, task_id: str
+    ) -> AsyncGenerator[dict[str, Any], None]:
+        if not self.token:
+            yield {
+                "type": "error",
+                "message": (
+                    "No HuggingFace token available. Free-tier models need the "
+                    "server's HF_TOKEN env var; paid-tier models need a token "
+                    "from your HF account."
+                ),
+            }
+            return
+
+        obs = env.reset(task_id=task_id)
+        seed = _obs_seed(obs)
+        yield {"type": "reset", "task_id": task_id, "scenario": seed}
+
+        messages: list[dict[str, Any]] = [
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": _first_user_turn(seed)},
+        ]
+
+        total_in = 0
+        total_out = 0
+        step = 0
+
+        while not obs.done and step < obs.max_steps:
+            step += 1
+            try:
+                raw, usage = await self._complete(messages)
+            except Exception as exc:  # noqa: BLE001
+                yield {"type": "error", "message": f"HF Inference call failed: {exc}"}
+                break
+
+            total_in += usage.get("input_tokens", 0)
+            total_out += usage.get("output_tokens", 0)
+
+            try:
+                action_dict = _parse_action_json(raw)
+            except ValueError:
+                yield {
+                    "type": "thought",
+                    "text": f"Unparseable action, submitting best guess: {raw[:160]}",
+                }
+                action_dict = {"action_type": "submit", "final_cause": "", "final_chain": []}
+
+            yield {"type": "thought", "text": f"(step {step}) {raw[:220]}"}
+            action = Action(**action_dict)
+            obs = env.step(action)
+            summary = _obs_summary(obs)
+
+            yield {
+                "type": "step",
+                "step": step,
+                "action": action_dict,
+                "observation": summary,
+            }
+            yield {
+                "type": "usage",
+                "input_tokens": total_in,
+                "output_tokens": total_out,
+                "cache_read_tokens": 0,
+                "cache_creation_tokens": 0,
+            }
+
+            messages.append({"role": "assistant", "content": raw})
+            messages.append({"role": "user", "content": _delta_turn(summary)})
+
+            if obs.done:
+                break
+
+        yield {
+            "type": "done",
+            "score": env.get_final_score(),
+            "steps": env.state.steps_taken,
+            "cause": env.state.ground_truth_cause,
+            "chain": env.state.ground_truth_chain,
+            "usage": {
+                "input_tokens": total_in,
+                "output_tokens": total_out,
+                "cache_read_tokens": 0,
+                "cache_creation_tokens": 0,
+            },
+        }
+
+    async def _complete(
+        self, messages: list[dict[str, Any]]
+    ) -> tuple[str, dict[str, int]]:
+        """Call HuggingFace's OpenAI-compatible chat completions endpoint.
+
+        HF Inference exposes an OpenAI-compatible router at
+        `router.huggingface.co/v1/chat/completions`, which keeps the message
+        contract identical to OpenAI. That sidesteps the prompt-echo and
+        chat-template quirks of the legacy `/models/{repo}` text endpoint.
+        """
+        import httpx
+
+        payload = {
+            "model": self.repo,
+            "messages": messages,
+            "max_tokens": self.max_tokens,
+            "temperature": 0.2,
+        }
+        headers = {
+            "Authorization": f"Bearer {self.token}",
+            "Content-Type": "application/json",
+        }
+        async with httpx.AsyncClient(timeout=90.0) as client:
+            resp = await client.post(
+                "https://router.huggingface.co/v1/chat/completions",
+                json=payload,
+                headers=headers,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+
+        text = data["choices"][0]["message"]["content"]
+        usage = data.get("usage", {})
+        return text.strip(), {
+            "input_tokens": int(usage.get("prompt_tokens", 0)),
+            "output_tokens": int(usage.get("completion_tokens", 0)),
+        }
