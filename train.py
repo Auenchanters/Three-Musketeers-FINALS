@@ -5,14 +5,22 @@ Demonstrates training an LLM on PostmortemEnv using:
 1. SFT (Supervised Fine-Tuning) on oracle demonstrations
 2. GRPO (Group Relative Policy Optimization) on environment rewards
 
-Designed for Google Colab with free T4 GPU. Uses HuggingFace TRL.
+Designed for any CUDA box (RunPod / Colab T4 / Modal). Uses HuggingFace TRL.
+
+Default model is `Qwen/Qwen2.5-1.5B-Instruct` because it is open-weight (no
+gated-license HF login required), ships a chat template, and fits LoRA on a
+single 16 GB T4. Pass `--model meta-llama/Llama-3.2-1B-Instruct` after
+`huggingface-cli login` if you prefer Llama-3.
 
 Usage:
+    # one-shot pipeline (recommended)
+    python train.py full
+
+    # or, step by step
     python train.py collect --n-seeds 20
-    python train.py sft --model meta-llama/Llama-3.2-1B-Instruct
-    python train.py grpo --model ./sft_output
-    python train.py plot
-    python train.py evaluate --model ./grpo_output
+    python train.py sft
+    python train.py evaluate --n-seeds 10 --model ./sft_output
+    python scripts/plot_agent_comparison.py
 """
 
 import argparse
@@ -160,8 +168,11 @@ def collect_demonstrations(n_seeds=20, output_path="training_data"):
 # Phase 2: SFT Training
 # =====================================================================
 
+DEFAULT_SFT_MODEL = "Qwen/Qwen2.5-1.5B-Instruct"
+
+
 def run_sft(
-    model_name="meta-llama/Llama-3.2-1B-Instruct",
+    model_name=DEFAULT_SFT_MODEL,
     demos_path="training_data/oracle_demos.jsonl",
     output_dir="sft_output",
     epochs=3,
@@ -682,7 +693,47 @@ def evaluate_trained_model(model_name: str, n_seeds: int = 10) -> dict:
             json.dump(results, f, indent=2)
 
     scores = [r["score"] for r in results["trained"]]
-    print("Trained model mean score: %.3f" % (sum(scores) / len(scores)))
+    trained_mean = sum(scores) / len(scores)
+    print("Trained model mean score: %.3f" % trained_mean)
+
+    # Sanity check: did training actually move the policy off random?
+    # Re-read the merged file so we have a single source of truth, no matter
+    # whether evaluation_results.json existed before this call or not.
+    merged = {}
+    if eval_path.exists():
+        with open(eval_path) as f:
+            merged = json.load(f)
+
+    random_eps = merged.get("random") or []
+    oracle_eps = merged.get("oracle") or []
+    if random_eps:
+        random_mean = sum(r["score"] for r in random_eps) / len(random_eps)
+        delta = trained_mean - random_mean
+        if delta < 0.02:
+            print()
+            print("WARNING: trained mean (%.3f) is within 0.02 of random (%.3f)." % (
+                trained_mean, random_mean,
+            ))
+            print("         The SFT model is not meaningfully outperforming chance.")
+            print("         Likely causes:")
+            print("           1. You pointed --model at the base HF id instead of the")
+            print("              LoRA adapter directory. Use --model ./sft_output.")
+            print("           2. Training saw too little data. Bump `collect --n-seeds`")
+            print("              to 50+ and rerun `sft`.")
+            print("           3. Generation is stuck on a degenerate token. Inspect a")
+            print("              trace with `python train.py trace --model ./sft_output`.")
+        else:
+            oracle_mean = (
+                sum(r["score"] for r in oracle_eps) / len(oracle_eps)
+                if oracle_eps else 0.0
+            )
+            remaining = oracle_mean - trained_mean
+            print(
+                "OK: trained beats random by %+.3f"
+                "  (random=%.3f, trained=%.3f, oracle=%.3f, remaining gap=%.3f)" % (
+                    delta, random_mean, trained_mean, oracle_mean, remaining,
+                )
+            )
     return results
 
 
@@ -929,6 +980,83 @@ def _average_rewards(agent_results):
 # Main CLI
 # =====================================================================
 
+def run_full_pipeline(
+    base_model: str = DEFAULT_SFT_MODEL,
+    collect_seeds: int = 20,
+    eval_seeds: int = 10,
+    epochs: int = 3,
+    sft_output: str = "sft_output",
+):
+    """End-to-end one-shot pipeline.
+
+    Runs collect -> baseline evaluate (random + oracle) -> SFT -> trained
+    evaluate -> plot, in that order, on whatever device is visible. Designed
+    so a rented GPU box only needs a single command after `pip install -r
+    requirements-train.txt`. Prints a final headline and exits non-zero if
+    any phase fails.
+    """
+    import time
+
+    print("=" * 60)
+    print("PostmortemEnv full pipeline")
+    print("=" * 60)
+    print("base model      : %s" % base_model)
+    print("collect seeds   : %d per difficulty (%d total demos)" % (
+        collect_seeds, collect_seeds * 3,
+    ))
+    print("eval seeds      : %d per difficulty (%d total episodes per agent)" % (
+        eval_seeds, eval_seeds * 3,
+    ))
+    print("SFT epochs      : %d" % epochs)
+    print("SFT output dir  : %s" % sft_output)
+    print()
+
+    # Phase 1 -- oracle demos
+    t0 = time.time()
+    print("[1/4] Collecting oracle demonstrations...")
+    collect_demonstrations(n_seeds=collect_seeds)
+    print("      done in %.1fs\n" % (time.time() - t0))
+
+    # Phase 2 -- baseline (random + oracle) on the eval seeds
+    t0 = time.time()
+    print("[2/4] Evaluating Random + Oracle baselines...")
+    evaluate_agents(n_seeds=eval_seeds)
+    print("      done in %.1fs\n" % (time.time() - t0))
+
+    # Phase 3 -- SFT
+    t0 = time.time()
+    print("[3/4] SFT on oracle demos...")
+    run_sft(model_name=base_model, output_dir=sft_output, epochs=epochs)
+    print("      done in %.1fs\n" % (time.time() - t0))
+
+    # Phase 4 -- evaluate the trained policy AND plot
+    t0 = time.time()
+    print("[4/4] Evaluating SFT policy + plotting...")
+    evaluate_trained_model(model_name=sft_output, n_seeds=eval_seeds)
+
+    # Re-render the README plots straight from the merged eval JSON
+    try:
+        import subprocess
+        subprocess.run(
+            [sys.executable, "scripts/plot_agent_comparison.py"],
+            check=True,
+        )
+    except Exception as exc:
+        print("Plot regeneration failed: %s" % exc)
+        print("Run manually: python scripts/plot_agent_comparison.py")
+    print("      done in %.1fs\n" % (time.time() - t0))
+
+    print("=" * 60)
+    print("Pipeline complete.")
+    print("Artifacts:")
+    print("  training_data/oracle_demos.jsonl")
+    print("  training_data/evaluation_results.json   (random + oracle + trained)")
+    print("  training_data/reward_curves.png")
+    print("  training_data/agent_comparison.png")
+    print("  %s/                                     (LoRA adapter + tokenizer)" % sft_output)
+    print("=" * 60)
+
+
 def main():
     parser = argparse.ArgumentParser(description="PostmortemEnv Training Pipeline")
     sub = parser.add_subparsers(dest="command")
@@ -940,7 +1068,7 @@ def main():
 
     # SFT
     p_sft = sub.add_parser("sft", help="Run SFT training")
-    p_sft.add_argument("--model", default="meta-llama/Llama-3.2-1B-Instruct")
+    p_sft.add_argument("--model", default=DEFAULT_SFT_MODEL)
     p_sft.add_argument("--demos", default="training_data/oracle_demos.jsonl")
     p_sft.add_argument("--output", default="sft_output")
     p_sft.add_argument("--epochs", type=int, default=3)
@@ -963,6 +1091,20 @@ def main():
     p_trace = sub.add_parser("trace", help="Collect a single episode trace from a trained model")
     p_trace.add_argument("--model", required=True, help="Path to trained model")
 
+    # Full pipeline (one-shot)
+    p_full = sub.add_parser(
+        "full",
+        help="One-shot pipeline: collect -> sft -> evaluate -> plot. Use this on a rented GPU.",
+    )
+    p_full.add_argument("--model", default=DEFAULT_SFT_MODEL,
+                        help="Base model for SFT (default: %s)" % DEFAULT_SFT_MODEL)
+    p_full.add_argument("--collect-seeds", type=int, default=20,
+                        help="Seeds per difficulty for oracle demo collection")
+    p_full.add_argument("--eval-seeds", type=int, default=10,
+                        help="Seeds per difficulty for evaluation")
+    p_full.add_argument("--epochs", type=int, default=3, help="SFT epochs")
+    p_full.add_argument("--sft-output", default="sft_output", help="Where to save the LoRA adapter")
+
     args = parser.parse_args()
 
     if args.command == "collect":
@@ -979,15 +1121,26 @@ def main():
         plot_rewards()
     elif args.command == "trace":
         collect_trace(args.model)
+    elif args.command == "full":
+        run_full_pipeline(
+            base_model=args.model,
+            collect_seeds=args.collect_seeds,
+            eval_seeds=args.eval_seeds,
+            epochs=args.epochs,
+            sft_output=args.sft_output,
+        )
     else:
         parser.print_help()
-        print("\nQuickstart:")
+        print("\nQuickstart (single command, runs everything on a rented GPU):")
+        print("  python train.py full")
+        print()
+        print("Step by step:")
         print("  python train.py collect --n-seeds 20")
         print("  python train.py evaluate --n-seeds 10")
-        print("  python train.py evaluate --n-seeds 10 --model ./grpo_output")
-        print("  python train.py trace --model ./grpo_output")
-        print("  python train.py plot")
-        print("  python train.py sft --model meta-llama/Llama-3.2-1B-Instruct")
+        print("  python train.py sft           # default: %s" % DEFAULT_SFT_MODEL)
+        print("  python train.py evaluate --n-seeds 10 --model ./sft_output")
+        print("  python scripts/plot_agent_comparison.py")
+        print("  python train.py trace --model ./sft_output")
         print("  python train.py grpo --model ./sft_output")
 
 

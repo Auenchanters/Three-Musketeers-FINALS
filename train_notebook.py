@@ -11,7 +11,7 @@
 #   2. Verify env
 #   3. Collect oracle demos
 #   4. Evaluate baselines (Random vs Oracle) → real reward gap
-#   5. SFT the 1B Llama on oracle demos
+#   5. SFT Qwen2.5-1.5B-Instruct (open-weight) on oracle demos
 #   6. Evaluate the SFT-trained model on held-out seeds
 #   7. Plot Random vs SFT vs Oracle
 #   8. (stretch) GRPO with environment rewards
@@ -78,10 +78,15 @@ if Path("training_data/reward_curves.png").exists():
     display(Image("training_data/reward_curves.png"))
 
 # %%
-# Cell 7: SFT on oracle demonstrations (requires GPU — Colab T4)
+# Cell 7: SFT on oracle demonstrations (requires GPU — Colab T4 / RunPod / Modal)
+#
+# Default base model is `Qwen/Qwen2.5-1.5B-Instruct` because it is open-weight
+# (no gated HF login form), ships a chat template, and fits LoRA on a free
+# Colab T4. Swap to `meta-llama/Llama-3.2-1B-Instruct` after running
+# `huggingface-cli login` if you prefer the Llama-3 family.
 from train import run_sft
 run_sft(
-    model_name="meta-llama/Llama-3.2-1B-Instruct",
+    model_name="Qwen/Qwen2.5-1.5B-Instruct",
     demos_path="training_data/oracle_demos.jsonl",
     output_dir="sft_output",
     epochs=3,
@@ -102,7 +107,7 @@ from peft import PeftModel
 import torch
 
 SFT_DIR = "sft_output"
-BASE_MODEL = "meta-llama/Llama-3.2-1B-Instruct"
+BASE_MODEL = "Qwen/Qwen2.5-1.5B-Instruct"  # match Cell 7
 MAX_NEW_TOKENS = 200
 MAX_STEPS_PER_EVAL = 15  # cap steps to keep eval fast
 
@@ -217,7 +222,7 @@ fig, ax = plt.subplots(figsize=(10, 6))
 x = range(len(diffs))
 width = 0.25
 ax.bar([i - width for i in x], random_by_diff, width, label="Random", color="coral", alpha=0.85)
-ax.bar(list(x), sft_by_diff, width, label="SFT (Llama-3.2-1B)", color="seagreen", alpha=0.85)
+ax.bar(list(x), sft_by_diff, width, label=f"SFT ({BASE_MODEL.split('/')[-1]})", color="seagreen", alpha=0.85)
 ax.bar([i + width for i in x], oracle_by_diff, width, label="Oracle", color="steelblue", alpha=0.85)
 ax.set_xticks(list(x))
 ax.set_xticklabels(["Easy", "Medium", "Hard"])
@@ -259,17 +264,14 @@ print()
 print("Results:")
 
 eval_path = Path("training_data/evaluation_results.json")
-sft_path = Path("training_data/sft_eval_results.json")
 if eval_path.exists():
     with open(eval_path) as f:
         res = json.load(f)
     r_mean = sum(r["score"] for r in res["random"]) / len(res["random"])
     o_mean = sum(r["score"] for r in res["oracle"]) / len(res["oracle"])
     print(f"  Random:  {r_mean:.3f}")
-    if sft_path.exists():
-        with open(sft_path) as f:
-            sres = json.load(f)
-        s_mean = sum(r["score"] for r in sres) / len(sres)
+    if "trained" in res and res["trained"]:
+        s_mean = sum(r["score"] for r in res["trained"]) / len(res["trained"])
         print(f"  SFT:     {s_mean:.3f}  (lift over random: +{s_mean - r_mean:.3f})")
     print(f"  Oracle:  {o_mean:.3f}")
     print()
@@ -277,9 +279,13 @@ if eval_path.exists():
     print("  the 20% rubric item asks for, driven by the deterministic environment reward.")
 
 print()
-print("Repro commands:")
+print("Repro commands (single shot):")
+print("  python train.py full")
+print()
+print("Or step by step:")
 print("  python train.py collect --n-seeds 20")
 print("  python train.py evaluate --n-seeds 10")
-print("  python train.py sft --model meta-llama/Llama-3.2-1B-Instruct")
-print("  python train.py plot")
+print(f"  python train.py sft --model {BASE_MODEL}")
+print("  python train.py evaluate --n-seeds 10 --model ./sft_output")
+print("  python scripts/plot_agent_comparison.py")
 print("=" * 60)

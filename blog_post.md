@@ -70,7 +70,7 @@ Evaluated on 10 seeds per difficulty (`python train.py evaluate --n-seeds 10`):
 | Oracle | 0.967 | 0.981 | 0.989 | **0.979** |
 | **Gap** | **0.868** | **0.886** | **0.881** | **0.878** |
 
-The 0.88 gap between random and oracle is the training headroom. SFT on `meta-llama/Llama-3.2-1B-Instruct` with LoRA on 60 oracle demonstrations is run on a Colab T4 to produce a real reward curve — the trained model must beat random to validate the environment.
+The 0.88 gap between random and oracle is the training headroom. SFT on `Qwen/Qwen2.5-1.5B-Instruct` (open-weight, no HF login required) with LoRA on 60 oracle demonstrations is run on any CUDA box (Colab T4 is enough) via a single command — `python train.py full` — to produce a real reward curve. The trained model must beat random to validate the environment.
 
 Source: [`training_data/evaluation_results.json`](training_data/evaluation_results.json)
 
