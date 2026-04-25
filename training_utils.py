@@ -1,0 +1,130 @@
+"""Shared prompt, parsing, and environment helpers for training/evaluation.
+
+Keeping these utilities in one place prevents the SFT script, GRPO reward
+function, Colab notebook, and frontier benchmark from silently drifting apart.
+"""
+
+from __future__ import annotations
+
+import json
+from typing import Any
+
+from models.action import Action
+
+
+SYSTEM_PROMPT = (
+    "You are an expert SRE investigator. Respond with ONLY a JSON object "
+    "containing your next investigation action. Available actions: "
+    "query_logs, fetch_trace, diff_commit, inspect_config, inspect_infra, "
+    "hypothesize, explain_chain, submit."
+)
+
+
+def reset_with_scenario(env: Any, scenario: dict[str, Any], *, as_dict: bool = True) -> Any:
+    """Reset an env from an in-memory scenario using the public env method."""
+    obs = env.reset_from_scenario(scenario)
+    if as_dict:
+        return obs.model_dump() if hasattr(obs, "model_dump") else vars(obs)
+    return obs
+
+
+def format_observation_compact(obs_dict: dict[str, Any]) -> str:
+    """Compact observation text used by SFT, GRPO, and evaluation prompts."""
+    d = obs_dict
+    lines = [
+        "Task: " + str(d.get("task_description", ""))[:240],
+        "Step: %d/%d" % (d.get("step_number", 0), d.get("max_steps", 40)),
+        "Budget: %d steps remaining" % d.get("remaining_budget", 0),
+    ]
+
+    for s in d.get("services", []):
+        svc = s if isinstance(s, dict) else (s.model_dump() if hasattr(s, "model_dump") else vars(s))
+        lines.append(
+            "  %s: status=%s err=%.1f%% deploys=%d"
+            % (
+                svc.get("name", "?"),
+                svc.get("status", "?"),
+                float(svc.get("error_rate_during_incident") or 0),
+                int(svc.get("recent_deploy_count") or 0),
+            )
+        )
+
+    commits = d.get("available_commits", [])
+    if commits:
+        lines.append("Recent commits:")
+        for c in commits[:8]:
+            lines.append(
+                "  commit %s [%s] %s"
+                % (c.get("hash", "?"), c.get("service", "?"), c.get("message", "")[:80])
+            )
+
+    configs = d.get("available_config_changes", [])
+    if configs:
+        lines.append("Config changes:")
+        for c in configs[:6]:
+            lines.append(
+                "  config %s [%s] %s"
+                % (c.get("config_id", "?"), c.get("service", "?"), c.get("description", "")[:80])
+            )
+
+    infra = d.get("available_infra_events", [])
+    if infra:
+        lines.append("Infra events:")
+        for e in infra[:6]:
+            lines.append("  infra %s %s" % (e.get("event_id", "?"), e.get("description", "")[:80]))
+
+    facts = d.get("known_facts", [])
+    if facts:
+        lines.append("Known facts (%d):" % len(facts))
+        for fact in facts[-6:]:
+            lines.append("  > " + str(fact)[:180])
+
+    qr = d.get("query_result", "")
+    if qr:
+        lines.append("Last result: " + str(qr)[:600])
+
+    return "\n".join(lines)
+
+
+def parse_action_json(text: str, fallback: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Extract the first JSON action object from a model completion."""
+    default = fallback or {"action_type": "query_logs", "service": "data", "keyword": "error"}
+    s = (text or "").strip()
+    if s.startswith("```"):
+        first_nl = s.find("\n")
+        last_fence = s.rfind("```")
+        if first_nl != -1 and last_fence > first_nl:
+            s = s[first_nl + 1:last_fence].strip()
+
+    start = s.find("{")
+    end = s.rfind("}") + 1
+    if start < 0 or end <= start:
+        return dict(default)
+
+    try:
+        parsed = json.loads(s[start:end])
+    except json.JSONDecodeError:
+        return dict(default)
+
+    if not isinstance(parsed, dict) or not parsed.get("action_type"):
+        return dict(default)
+    return parsed
+
+
+def action_from_dict(action_dict: dict[str, Any]) -> Action:
+    """Build an Action while ignoring unknown keys from model output."""
+    return Action(
+        action_type=action_dict.get("action_type", "query_logs"),
+        service=action_dict.get("service"),
+        keyword=action_dict.get("keyword"),
+        time_window=action_dict.get("time_window"),
+        trace_id=action_dict.get("trace_id"),
+        commit_hash=action_dict.get("commit_hash"),
+        config_id=action_dict.get("config_id"),
+        event_id=action_dict.get("event_id"),
+        cause_entity_id=action_dict.get("cause_entity_id"),
+        chain=action_dict.get("chain"),
+        final_cause=action_dict.get("final_cause"),
+        final_chain=action_dict.get("final_chain"),
+        reason=action_dict.get("reason"),
+    )

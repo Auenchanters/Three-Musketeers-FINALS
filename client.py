@@ -1,29 +1,63 @@
-"""
-PostmortemEnv — OpenEnv Client
+"""Small synchronous HTTP client for PostmortemEnv smoke tests and demos."""
 
-Implements the required abstract methods for WebSocket-based communication
-with the PostmortemEnv server.
-"""
+from dataclasses import dataclass
+from typing import Any, Dict, Optional
 
-from typing import Any, Dict
+import requests
 
-from openenv.core.env_client import EnvClient, StepResult
 from models.action import Action
 from models.observation import Observation
 from models.state import EnvironmentState
 
 
-class PostmortemClient(EnvClient[Action, Observation, EnvironmentState]):
-    """
-    Client for interacting with the PostmortemEnv environment.
-    Use this class to communicate with the deployed HuggingFace Space.
+@dataclass
+class StepResult:
+    """Result of one environment step."""
+
+    observation: Observation
+    reward: Optional[float] = None
+    done: bool = False
+
+
+class PostmortemClient:
+    """Synchronous client for the stateful HTTP endpoints.
+
+    The official OpenEnv client is WebSocket-first in recent releases. This
+    lightweight client keeps the repo's CLI validators and inference harness
+    simple while the server still exposes the canonical OpenEnv ``/ws`` path.
     """
 
-    def __init__(self, base_url: str = "http://localhost:7860", **kwargs):
-        super().__init__(base_url, **kwargs)
+    def __init__(self, base_url: str = "http://localhost:7860", request_timeout_s: float = 15.0):
+        self._base = base_url.rstrip("/")
+        self._timeout = float(request_timeout_s)
+        self._http = requests.Session()
 
-    def _parse_result(self, payload: Dict[str, Any]) -> StepResult[Observation]:
-        """Convert a JSON response from the env server to StepResult[Observation]."""
+    def reset(self, task_id: str = "", seed: Optional[int] = None, **kwargs: Any) -> Observation:
+        body: Dict[str, Any] = {}
+        if task_id:
+            body["task_id"] = task_id
+        if seed is not None:
+            body["seed"] = seed
+        body.update(kwargs)
+        resp = self._http.post(f"{self._base}/reset", json=body, timeout=self._timeout)
+        resp.raise_for_status()
+        return self._parse_result(resp.json()).observation
+
+    def step(self, action: Action, **kwargs: Any) -> StepResult:
+        payload = action.model_dump(exclude_none=True)
+        if kwargs:
+            payload = {"action": payload, **kwargs}
+        resp = self._http.post(f"{self._base}/step", json=payload, timeout=self._timeout)
+        resp.raise_for_status()
+        return self._parse_result(resp.json())
+
+    def get_state(self) -> EnvironmentState:
+        resp = self._http.get(f"{self._base}/state", timeout=self._timeout)
+        resp.raise_for_status()
+        return self._parse_state(resp.json())
+
+    def _parse_result(self, payload: Dict[str, Any]) -> StepResult:
+        """Convert a JSON response from the env server to StepResult."""
         obs_data = payload.get("observation", payload)
         observation = Observation(**obs_data)
         return StepResult(
@@ -36,7 +70,3 @@ class PostmortemClient(EnvClient[Action, Observation, EnvironmentState]):
         """Convert a JSON response from the state endpoint to EnvironmentState."""
         state_data = payload.get("state", payload)
         return EnvironmentState(**state_data)
-
-    def _step_payload(self, action: Action) -> Dict[str, Any]:
-        """Convert an Action object to the JSON data expected by the env server."""
-        return action.model_dump(exclude_none=True)

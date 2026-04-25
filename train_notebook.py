@@ -54,6 +54,7 @@ print(f"  Result: {obs.query_result[:200]}")
 # %%
 # Cell 4: Collect oracle demonstrations
 from train import collect_demonstrations, evaluate_agents, _reset_with_scenario, _format_obs_compact
+from training_utils import SYSTEM_PROMPT, action_from_dict, parse_action_json
 
 demos_path = collect_demonstrations(n_seeds=20, output_path="training_data")
 print(f"\nDemonstrations saved to: {demos_path}")
@@ -100,13 +101,6 @@ BASE_MODEL = "meta-llama/Llama-3.2-1B-Instruct"
 MAX_NEW_TOKENS = 200
 MAX_STEPS_PER_EVAL = 15  # cap steps to keep eval fast
 
-SYSTEM_PROMPT = (
-    "You are an expert SRE investigator. Respond with ONLY a JSON object "
-    "containing your next investigation action. Available actions: "
-    "query_logs, fetch_trace, diff_commit, inspect_config, hypothesize, "
-    "explain_chain, submit."
-)
-
 print("Loading SFT model for evaluation...")
 tokenizer = AutoTokenizer.from_pretrained(BASE_MODEL, trust_remote_code=True)
 if tokenizer.pad_token is None:
@@ -133,16 +127,9 @@ def _sample_action(obs_text: str) -> dict:
             do_sample=False,
             temperature=1.0,
             pad_token_id=tokenizer.pad_token_id,
-        )
+    )
     text = tokenizer.decode(out[0][inputs["input_ids"].shape[1]:], skip_special_tokens=True)
-    start = text.find("{")
-    end = text.rfind("}") + 1
-    if start < 0 or end <= start:
-        return {"action_type": "query_logs", "service": "data", "keyword": "error"}
-    try:
-        return json.loads(text[start:end])
-    except Exception:
-        return {"action_type": "query_logs", "service": "data", "keyword": "error"}
+    return parse_action_json(text)
 
 
 sft_results = []
@@ -161,19 +148,7 @@ for difficulty in ["easy", "medium", "hard"]:
             obs_text = _format_obs_compact(obs.model_dump())
             action_dict = _sample_action(obs_text)
             try:
-                action = Action(
-                    action_type=action_dict.get("action_type", "query_logs"),
-                    service=action_dict.get("service"),
-                    keyword=action_dict.get("keyword"),
-                    trace_id=action_dict.get("trace_id"),
-                    commit_hash=action_dict.get("commit_hash"),
-                    config_id=action_dict.get("config_id"),
-                    cause_entity_id=action_dict.get("cause_entity_id"),
-                    chain=action_dict.get("chain"),
-                    final_cause=action_dict.get("final_cause"),
-                    final_chain=action_dict.get("final_chain"),
-                    reason=action_dict.get("reason"),
-                )
+                action = action_from_dict(action_dict)
                 obs = env.step(action)
                 episode_rewards.append(float(obs.reward))
                 if obs.done:

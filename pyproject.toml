@@ -11,11 +11,12 @@ authors = [
 ]
 dependencies = [
     "pydantic>=2.4.0",
-    "openenv-core>=0.1.0",
+    "openenv-core==0.2.3",
     "fastapi>=0.104.0",
     "uvicorn>=0.23.0",
     "websockets>=11.0",
-    "httpx>=0.25.0"
+    "httpx>=0.25.0",
+    "requests>=2.31.0"
 ]
 requires-python = ">=3.11"
 
