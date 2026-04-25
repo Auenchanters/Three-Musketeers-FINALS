@@ -36,41 +36,35 @@ class ModelInfo:
         return asdict(self)
 
 
+# Provider availability is verified against
+# https://huggingface.co/api/models/<repo>?expand[]=inferenceProviderMapping
+# as of 2026-04-26. Each entry is annotated with the providers that currently
+# serve it on the HF Inference Providers router. Models with NO live provider
+# (Llama-3.2-3B-Instruct, Phi-3.5-mini-instruct, Mistral-7B-Instruct-v0.3 as of
+# 2026-04) were dropped — they 400 with `model_not_supported` for every user
+# regardless of which providers they have enabled, so showing them in the UI
+# is just a guaranteed dead-end.
+#
+# Default order: the first free entry is what new visitors land on. We pick a
+# model that is live on the broadest set of providers so the request succeeds
+# without the user having to manually enable a niche provider in their HF
+# account settings (https://huggingface.co/settings/inference-providers).
 MODELS: list[ModelInfo] = [
     # ---- Free tier (≤ $1, server's HF token) -------------------------------
+    # Default. Live on 5 providers — Cerebras + Novita are typically enabled
+    # by default on fresh HF accounts, so this is the safest first-run pick.
     ModelInfo(
-        id="qwen2.5-1.5b-instruct",
-        display_name="Qwen2.5 1.5B Instruct",
-        repo="Qwen/Qwen2.5-1.5B-Instruct",
-        params_b=1.5,
-        context_window=32_768,
-        tier="free",
-        est_cost_usd=0.02,
-        blurb="Compact, JSON-clean, fastest free option. The default investigator.",
-        license="Apache-2.0",
-    ),
-    ModelInfo(
-        id="llama-3.2-3b-instruct",
-        display_name="Llama 3.2 3B Instruct",
-        repo="meta-llama/Llama-3.2-3B-Instruct",
-        params_b=3.0,
+        id="llama-3.1-8b-instruct",
+        display_name="Llama 3.1 8B Instruct",
+        repo="meta-llama/Llama-3.1-8B-Instruct",
+        params_b=8.0,
         context_window=131_072,
         tier="free",
-        est_cost_usd=0.08,
-        blurb="Meta's lightweight reasoner. Long context, balanced.",
-        license="Llama 3.2 Community",
+        est_cost_usd=0.06,
+        blurb="Meta's reliable 8B reasoner. Live on 5 providers — broadest free reach.",
+        license="Llama 3.1 Community",
     ),
-    ModelInfo(
-        id="phi-3.5-mini-instruct",
-        display_name="Phi-3.5 mini Instruct",
-        repo="microsoft/Phi-3.5-mini-instruct",
-        params_b=3.8,
-        context_window=131_072,
-        tier="free",
-        est_cost_usd=0.10,
-        blurb="Microsoft's reasoning-tuned small model. Strong tool-use.",
-        license="MIT",
-    ),
+    # Live on Together (almost always default-enabled) + Featherless.
     ModelInfo(
         id="qwen2.5-7b-instruct",
         display_name="Qwen2.5 7B Instruct",
@@ -82,28 +76,55 @@ MODELS: list[ModelInfo] = [
         blurb="The strongest free pick. Reliable JSON, good investigation depth.",
         license="Apache-2.0",
     ),
+    # Newer Qwen3 line — live on nscale + fireworks-ai + featherless-ai.
     ModelInfo(
-        id="mistral-7b-instruct-v0.3",
-        display_name="Mistral 7B Instruct v0.3",
-        repo="mistralai/Mistral-7B-Instruct-v0.3",
+        id="qwen3-8b",
+        display_name="Qwen3 8B",
+        repo="Qwen/Qwen3-8B",
+        params_b=8.0,
+        context_window=131_072,
+        tier="free",
+        est_cost_usd=0.10,
+        blurb="Qwen's 2026 reasoning-tuned line. Strong CoT, JSON-clean.",
+        license="Apache-2.0",
+    ),
+    # Code-tuned 7B on nscale + featherless-ai.
+    ModelInfo(
+        id="qwen2.5-coder-7b-instruct",
+        display_name="Qwen2.5 Coder 7B Instruct",
+        repo="Qwen/Qwen2.5-Coder-7B-Instruct",
         params_b=7.0,
+        context_window=131_072,
+        tier="free",
+        est_cost_usd=0.12,
+        blurb="Code-tuned 7B. Best at structured action JSON + commit diffs.",
+        license="Apache-2.0",
+    ),
+    # Smallest / cheapest. Featherless-ai-only, kept as a budget option.
+    ModelInfo(
+        id="qwen2.5-1.5b-instruct",
+        display_name="Qwen2.5 1.5B Instruct",
+        repo="Qwen/Qwen2.5-1.5B-Instruct",
+        params_b=1.5,
         context_window=32_768,
         tier="free",
-        est_cost_usd=0.18,
-        blurb="Mistral's classic. Fast, articulate, function-calling capable.",
+        est_cost_usd=0.02,
+        blurb="Smallest, cheapest. Requires Featherless-ai enabled in HF settings.",
         license="Apache-2.0",
     ),
     # ---- Paid tier (> $1, bring your own HF token) -------------------------
+    # 9 providers — the broadest reach in the registry. Replaces Llama-3.1-70B,
+    # which is now scaleway-only (one-provider-deep is a common 400 trigger).
     ModelInfo(
-        id="llama-3.1-70b-instruct",
-        display_name="Llama 3.1 70B Instruct",
-        repo="meta-llama/Llama-3.1-70B-Instruct",
+        id="llama-3.3-70b-instruct",
+        display_name="Llama 3.3 70B Instruct",
+        repo="meta-llama/Llama-3.3-70B-Instruct",
         params_b=70.0,
         context_window=131_072,
         tier="paid",
         est_cost_usd=1.20,
-        blurb="Frontier-class open weights. Best Llama for hard cases.",
-        license="Llama 3.1 Community",
+        blurb="Frontier 70B. Live on Groq, Together, Novita, Fireworks, Sambanova + 4 more.",
+        license="Llama 3.3 Community",
     ),
     ModelInfo(
         id="qwen2.5-72b-instruct",
