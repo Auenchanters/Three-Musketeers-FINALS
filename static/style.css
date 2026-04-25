@@ -582,11 +582,14 @@ kbd {
   align-items: baseline;
   gap: 8px;
   flex-wrap: wrap;
-  /* min-width:0 + overflow-wrap stops the inner text from breaking
-     character-by-character when the parent grid column shrinks (e.g.
-     when the page renders inside a narrow HF Spaces iframe). */
+  /* min-width:0 lets the flex item shrink below content size so it
+     doesn't blow up the parent grid column. We use `break-word` (not
+     `anywhere`) so long single words wrap at word boundaries; `anywhere`
+     was breaking "Qwen2.5 1.5B Instruct" into a single-character
+     vertical column inside the HF Spaces narrow iframe. */
   min-width: 0;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
+  word-break: normal;
 }
 .model-meta {
   font-family: "JetBrains Mono", ui-monospace, monospace;
@@ -1269,7 +1272,10 @@ kbd {
   color: var(--ink-2);
   min-width: 0;
   flex: 1 1 auto;
-  overflow-wrap: anywhere;
+  /* break-word (not anywhere) so we wrap at word boundaries; anywhere was
+     shattering long single tokens into vertical 1-char columns. */
+  overflow-wrap: break-word;
+  word-break: normal;
 }
 
 /* ---------- Service graph -------------------------------------------------- */
@@ -1372,10 +1378,13 @@ kbd {
 .history-item .task {
   color: var(--ink-2);
   /* Allow long human-readable task names ("5xx Spike After Recent
-     Deploy · oracle") to wrap inside the drawer instead of overflowing. */
+     Deploy · oracle") to wrap inside the drawer instead of overflowing.
+     break-word (not anywhere) keeps wrapping at word boundaries; anywhere
+     produced single-character columns inside very narrow drawers. */
   min-width: 0;
   flex: 1 1 auto;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
+  word-break: normal;
 }
 .history-item .score {
   font-family: "JetBrains Mono", ui-monospace, monospace;
@@ -1403,10 +1412,13 @@ kbd {
   color: var(--ink);
   font-weight: 500;
   /* Long task names ("Multi-Region JWT Failover Drift") otherwise
-     squeeze the ELO chip out of the drawer on narrow viewports. */
+     squeeze the ELO chip out of the drawer on narrow viewports.
+     break-word (not anywhere) wraps at word boundaries instead of
+     character-by-character. */
   min-width: 0;
   flex: 1 1 auto;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
+  word-break: normal;
 }
 .curriculum-row .elo {
   font-family: "JetBrains Mono", ui-monospace, monospace;

@@ -575,10 +575,17 @@ function subscribe(runId) {
     try {
       const data = JSON.parse(e.data);
       const msg = data.message || "stream error";
-      const isKeyIssue = /token|api key|unauthor|401|403/i.test(msg);
-      const hint = isKeyIssue
-        ? "Check that your HuggingFace token has Inference permission."
-        : "Try a different model or scenario.";
+      // Prefer the structured hint the backend now attaches for HF
+      // Inference failures (HFInferenceError._hint maps 400/401/403/404/
+      // 429/503 to a tailored next step). Fall back to keyword sniffing
+      // for older error shapes.
+      let hint = data.hint;
+      if (!hint) {
+        const isKeyIssue = /token|api key|unauthor|401|403/i.test(msg);
+        hint = isKeyIssue
+          ? "Check that your HuggingFace token has Inference permission."
+          : "Try a different model or scenario.";
+      }
       setStatus(msg, "error");
       showStreamBanner(msg, hint);
       resetRunButton();

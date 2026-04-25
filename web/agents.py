@@ -608,8 +608,24 @@ class HFInferenceAgent:
             step += 1
             try:
                 raw, usage = await self._complete(messages)
+            except HFInferenceError as exc:
+                yield {
+                    "type": "error",
+                    "message": f"HF Inference {exc.status}: {exc.body[:200] or '(no body)'}",
+                    "status": exc.status,
+                    "hint": exc._hint(),
+                    "repo": exc.repo,
+                }
+                break
             except Exception as exc:  # noqa: BLE001
-                yield {"type": "error", "message": f"HF Inference call failed: {exc}"}
+                yield {
+                    "type": "error",
+                    "message": f"HF Inference call failed: {exc}",
+                    "hint": (
+                        "Network or provider error. Try again, or switch to "
+                        "a different model."
+                    ),
+                }
                 break
 
             total_in += usage.get("input_tokens", 0)
@@ -681,6 +697,12 @@ class HFInferenceAgent:
         `router.huggingface.co/v1/chat/completions`, which keeps the message
         contract identical to OpenAI. That sidesteps the prompt-echo and
         chat-template quirks of the legacy `/models/{repo}` text endpoint.
+
+        On non-2xx responses we raise ``HFInferenceError`` with the upstream
+        body and a human-readable hint. ``raise_for_status`` alone produced
+        opaque "Client error '400 Bad Request'" messages that gave neither
+        the user nor the UI any way to recover; the new exception is what
+        the SSE error event surfaces.
         """
         import httpx
 
@@ -700,7 +722,12 @@ class HFInferenceAgent:
                 json=payload,
                 headers=headers,
             )
-            resp.raise_for_status()
+            if resp.status_code != 200:
+                raise HFInferenceError(
+                    status=resp.status_code,
+                    body=resp.text,
+                    repo=self.repo,
+                )
             data = resp.json()
 
         text = data["choices"][0]["message"]["content"]
@@ -709,3 +736,58 @@ class HFInferenceAgent:
             "input_tokens": int(usage.get("prompt_tokens", 0)),
             "output_tokens": int(usage.get("completion_tokens", 0)),
         }
+
+
+class HFInferenceError(Exception):
+    """HuggingFace Inference Router returned a non-2xx response.
+
+    Carries the upstream status, raw body, and the repo we asked for so the
+    SSE error message can include both the technical detail (for debugging)
+    and a friendly hint (for the UI).
+    """
+
+    def __init__(self, status: int, body: str, repo: str) -> None:
+        self.status = int(status)
+        self.body = (body or "").strip()
+        self.repo = repo
+        super().__init__(self._format())
+
+    def _format(self) -> str:
+        snippet = self.body[:200].replace("\n", " ").strip() or "(no body)"
+        hint = self._hint()
+        return f"HF Inference {self.status} for {self.repo}: {snippet} - {hint}"
+
+    def _hint(self) -> str:
+        body_lower = self.body.lower()
+        if self.status == 401 or "invalid username or password" in body_lower:
+            return (
+                "Token is invalid or has no Inference Providers permission. "
+                "Generate a new token at huggingface.co/settings/tokens with "
+                "the 'Make calls to Inference Providers' scope."
+            )
+        if self.status == 403:
+            return (
+                "Token rejected. Check that this model is enabled for your "
+                "account and that your HF subscription covers it."
+            )
+        if self.status == 404 or "not found" in body_lower:
+            return (
+                "This model is not currently deployed on any Inference "
+                "Provider. Pick a different model from the dropdown."
+            )
+        if self.status == 429 or "rate limit" in body_lower:
+            return (
+                "Rate-limited by HuggingFace. Wait a minute and try again, "
+                "or switch to a less-busy model."
+            )
+        if self.status == 503 or "loading" in body_lower or "warming" in body_lower:
+            return (
+                "Model is cold-starting on the provider. Try again in 30s."
+            )
+        if self.status == 400:
+            return (
+                "Provider rejected the request. The model may have been "
+                "removed from Inference Providers or your token may lack "
+                "the right permissions. Try a different model."
+            )
+        return "Try a different model, or run the local Oracle / Random agent from /api."
