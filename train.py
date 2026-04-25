@@ -308,7 +308,7 @@ def run_grpo(
 
     from engine.environment import PostmortemEnvironment
     from models.action import Action
-    from data.seed_generator import generate_scenario, generate_oracle_solution
+    from data.seed_generator import generate_scenario
 
     # Model + tokenizer (loaded early so we can use the chat template for prompts)
     tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
@@ -925,6 +925,87 @@ def plot_rewards():
     plt.close()
 
 
+def plot_loss_curve(sft_output: str = "sft_output") -> str:
+    """Render ``training_data/loss_curve.png`` from the SFT trainer log.
+
+    ``run_sft`` persists ``trainer.state.log_history`` to
+    ``<sft_output>/sft_metrics.json``. Each entry is one TRL ``logging_step``
+    record; training-loss entries carry a ``loss`` key, eval entries carry
+    ``eval_loss``. We plot the training-loss series against ``step`` (with
+    ``epoch`` boundaries marked) so the README can inline a real, judge-
+    friendly loss curve instead of a fabricated stub.
+
+    Returns the output path (or an empty string if no metrics exist yet —
+    no fake plot is written when the SFT run has not happened).
+    """
+    metrics_path = Path(sft_output) / "sft_metrics.json"
+    if not metrics_path.exists():
+        print(
+            "No SFT metrics at %s. Run `python train.py sft` (or `python "
+            "train.py full`) on a GPU first; the loss curve is plotted "
+            "from the trainer's own log history." % metrics_path
+        )
+        return ""
+
+    try:
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+    except ImportError:
+        print("matplotlib not installed. Install with: pip install matplotlib")
+        return ""
+
+    with open(metrics_path) as f:
+        log_history = json.load(f)
+
+    train_steps, train_losses, train_epochs = [], [], []
+    eval_steps, eval_losses = [], []
+    for entry in log_history:
+        if "loss" in entry and "step" in entry:
+            train_steps.append(entry["step"])
+            train_losses.append(float(entry["loss"]))
+            train_epochs.append(float(entry.get("epoch", 0.0)))
+        if "eval_loss" in entry and "step" in entry:
+            eval_steps.append(entry["step"])
+            eval_losses.append(float(entry["eval_loss"]))
+
+    if not train_losses:
+        print("No 'loss' entries in %s — nothing to plot." % metrics_path)
+        return ""
+
+    out_dir = Path("training_data")
+    out_dir.mkdir(exist_ok=True)
+    plot_path = out_dir / "loss_curve.png"
+
+    fig, ax = plt.subplots(figsize=(9, 5))
+    ax.plot(train_steps, train_losses, color="steelblue", linewidth=2,
+            label="train loss")
+    if eval_losses:
+        ax.plot(eval_steps, eval_losses, color="coral", linewidth=2,
+                linestyle="--", label="eval loss")
+
+    # Mark epoch boundaries to help judges read the curve
+    if train_epochs:
+        last_e = -1.0
+        for s, e in zip(train_steps, train_epochs):
+            ie = int(e)
+            if ie != int(last_e) and ie > 0:
+                ax.axvline(x=s, color="gray", alpha=0.25, linestyle=":")
+            last_e = e
+
+    ax.set_xlabel("Training step")
+    ax.set_ylabel("Cross-entropy loss")
+    ax.set_title("PostmortemEnv SFT loss (real run, %d steps logged)" %
+                 len(train_steps))
+    ax.legend(loc="upper right")
+    ax.grid(alpha=0.3)
+    plt.tight_layout()
+    plt.savefig(plot_path, dpi=150, bbox_inches="tight")
+    print("Loss curve saved to %s" % plot_path)
+    plt.close()
+    return str(plot_path)
+
+
 def _mean_score(agent_results: list) -> float:
     """Helper: mean final score for a list of episode result dicts."""
     if not agent_results:
@@ -1044,6 +1125,10 @@ def run_full_pipeline(
     except Exception as exc:
         print("Plot regeneration failed: %s" % exc)
         print("Run manually: python scripts/plot_agent_comparison.py")
+
+    # Render the SFT loss curve straight from trainer.state.log_history.
+    # No-op (and prints a helpful message) if sft_metrics.json is missing.
+    plot_loss_curve(sft_output=sft_output)
     print("      done in %.1fs\n" % (time.time() - t0))
 
     print("=" * 60)
@@ -1053,6 +1138,7 @@ def run_full_pipeline(
     print("  training_data/evaluation_results.json   (random + oracle + trained)")
     print("  training_data/reward_curves.png")
     print("  training_data/agent_comparison.png")
+    print("  training_data/loss_curve.png            (from sft_metrics.json)")
     print("  %s/                                     (LoRA adapter + tokenizer)" % sft_output)
     print("=" * 60)
 
@@ -1087,6 +1173,14 @@ def main():
     # Plot
     sub.add_parser("plot", help="Plot reward curves")
 
+    # Plot loss (from saved sft_metrics.json)
+    p_loss = sub.add_parser(
+        "plot-loss",
+        help="Plot SFT loss curve from <sft_output>/sft_metrics.json",
+    )
+    p_loss.add_argument("--sft-output", default="sft_output",
+                        help="Directory containing sft_metrics.json")
+
     # Trace
     p_trace = sub.add_parser("trace", help="Collect a single episode trace from a trained model")
     p_trace.add_argument("--model", required=True, help="Path to trained model")
@@ -1119,6 +1213,8 @@ def main():
             evaluate_trained_model(args.model, args.n_seeds)
     elif args.command == "plot":
         plot_rewards()
+    elif args.command == "plot-loss":
+        plot_loss_curve(sft_output=args.sft_output)
     elif args.command == "trace":
         collect_trace(args.model)
     elif args.command == "full":
@@ -1140,6 +1236,7 @@ def main():
         print("  python train.py sft           # default: %s" % DEFAULT_SFT_MODEL)
         print("  python train.py evaluate --n-seeds 10 --model ./sft_output")
         print("  python scripts/plot_agent_comparison.py")
+        print("  python train.py plot-loss     # loss_curve.png from sft_metrics.json")
         print("  python train.py trace --model ./sft_output")
         print("  python train.py grpo --model ./sft_output")
 

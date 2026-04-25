@@ -195,6 +195,32 @@ async def _run_agent(run: Run, agent, task_id: str) -> None:
         except OSError:
             pass
 
+        # Emit a one-line structured summary alongside the full event dump.
+        # Cheap to ingest (jq/grep) for benchmarks, dashboards, and judges
+        # who want to skim outcomes without reading every step trace.
+        try:
+            summary_line = json.dumps(
+                {
+                    "run_id": run.run_id,
+                    "agent_type": run.agent_type,
+                    "task_id": run.task_id,
+                    "status": run.status,
+                    "final_score": run.final_score,
+                    "steps_used": run.steps_used,
+                    "started_at": run.started_at,
+                    "ended_at": run.ended_at,
+                    "duration_sec": (
+                        (run.ended_at - run.started_at)
+                        if run.ended_at is not None else None
+                    ),
+                },
+                default=str,
+            )
+            with open(RUNS_DIR / f"{run.run_id}.summary.jsonl", "a") as fh:
+                fh.write(summary_line + "\n")
+        except OSError:
+            pass
+
 
 async def _push(run: Run, event: dict[str, Any]) -> None:
     run.events.append(event)

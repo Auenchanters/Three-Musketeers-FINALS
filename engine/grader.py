@@ -80,29 +80,47 @@ class Grader:
         cause_type: str = "commit",
         contributing_causes: Optional[List[str]] = None,
     ) -> bool:
-        """Check if the submitted cause matches the ground truth.
+        """Check if the submitted cause is an *exact* match for the root cause.
 
-        For correlated causes (``cause_type == 'correlated'``), accepts:
-        - Exact match on the combined cause ID (e.g. ``'commit-abc+infra-xyz'``)
-        - Any of the contributing causes individually (partial credit
-          is handled in scoring via the ``partial_credit`` kwarg)
+        For ``cause_type == 'correlated'`` scenarios, the only response that
+        counts as fully correct is the combined cause ID (e.g.
+        ``'commit-abc+infra-xyz'``). Naming a single contributing cause is
+        not considered "correct" here — that case is awarded 0.5 partial
+        credit by :func:`compute_final_score` via its ``partial_credit``
+        branch. Keeping ``check_cause_match`` strict makes that branch
+        reachable; previously it returned ``True`` for any contributing
+        cause, which silently turned the partial-credit logic into dead
+        code (see analysis_results (2).md C5).
         """
         if not submitted_cause or not ground_truth_cause:
             return False
 
-        # Normalize for comparison
         submitted = submitted_cause.strip().lower()
         truth = ground_truth_cause.strip().lower()
 
-        if submitted == truth:
-            return True
+        return submitted == truth
 
-        # For correlated causes, check if submitted matches any contributing cause
-        if cause_type == "correlated" and contributing_causes:
-            for cc in contributing_causes:
-                if submitted == cc.strip().lower():
-                    return True
+    @staticmethod
+    def is_contributing_cause_match(
+        submitted_cause: str,
+        cause_type: str,
+        contributing_causes: Optional[List[str]] = None,
+    ) -> bool:
+        """Return True iff the submission names *one* of the contributing
+        causes for a correlated incident (and is not the full combined ID).
 
+        Used by terminal scoring to award 0.5 partial cause credit. Does
+        not consider exact-match cases — those are handled by
+        :func:`check_cause_match`.
+        """
+        if cause_type != "correlated" or not contributing_causes:
+            return False
+        if not submitted_cause:
+            return False
+        submitted = submitted_cause.strip().lower()
+        for cc in contributing_causes:
+            if submitted == cc.strip().lower():
+                return True
         return False
 
     @staticmethod
@@ -172,12 +190,10 @@ class Grader:
             submitted_cause, ground_truth_cause, cause_type, contributing_causes
         )
         partial_credit = 0.0
-        if cause_type == "correlated" and not is_correct and contributing_causes:
-            submitted_lower = (submitted_cause or "").strip().lower()
-            for cc in contributing_causes:
-                if submitted_lower == cc.strip().lower():
-                    partial_credit = 0.5
-                    break
+        if not is_correct and Grader.is_contributing_cause_match(
+            submitted_cause, cause_type, contributing_causes
+        ):
+            partial_credit = 0.5
 
         # --- Chain similarity ---
         chain_sim = Grader.compute_chain_similarity(submitted_chain, ground_truth_chain)
@@ -237,12 +253,10 @@ class Grader:
             submitted_cause, ground_truth_cause, cause_type, contributing_causes
         )
         partial_credit = 0.0
-        if cause_type == "correlated" and not is_correct and contributing_causes:
-            submitted_lower = (submitted_cause or "").strip().lower()
-            for cc in contributing_causes:
-                if submitted_lower == cc.strip().lower():
-                    partial_credit = 0.5
-                    break
+        if not is_correct and Grader.is_contributing_cause_match(
+            submitted_cause, cause_type, contributing_causes
+        ):
+            partial_credit = 0.5
 
         chain_sim = Grader.compute_chain_similarity(submitted_chain, ground_truth_chain)
 

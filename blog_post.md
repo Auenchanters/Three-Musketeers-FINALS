@@ -3,15 +3,17 @@
 **Theme 3.1: World Modeling (Professional) | Meta PyTorch OpenEnv Hackathon Apr '26**
 **Team: Three Musketeers (Utkarsh, Mohit, Tanush) | Scaler AI Labs Sub-Prize**
 
+> 🔗 **Try the live demo:** <https://huggingface.co/spaces/Auenchanters/postmortemenv> — choose a task, hit *Run Oracle*, watch the agent investigate. No API key required.
+
 ---
 
 ## 03:02 UTC
 
-The pager goes off. Checkout is throwing 5xx errors. Twelve dashboards. A hundred recent commits. Eight services upstream. You have two minutes before someone in the group chat asks "what's the impact?" — and twenty before someone wants a root cause. You are not being asked to *fix* anything. The outage already happened. You are being asked to *explain* it.
+The pager goes off. Checkout is throwing 5xx errors. Twelve dashboards. A hundred recent commits. Eight services upstream. You have two minutes before someone in the group chat asks "what's the impact?" — and twenty before someone wants a root cause. You are not being asked to *fix* anything. The outage already happened. You are being asked to **explain** it.
 
-Today's tooling tells you **what** is broken — error rates, p99 latencies, alarm states — but almost nothing about **why**. Every "AI for ops" demo we've seen is the same: predict the failure, autoscale the cluster, restart the pod. None of them teach the actual hard skill, which is reading a frozen pile of telemetry and reconstructing the chain of events. That skill is *epistemic*, not *control*: it's about gathering evidence, ranking hypotheses, and stopping when the story is consistent. RL hasn't had an environment that rewards it.
+That ask — *explain it* — is the entire job, and it is the part of operations work no current AI demo touches. Today's tooling tells you **what** is broken — error rates, p99 latencies, alarm states — but almost nothing about **why**. Every "AI for ops" demo we've seen is the same shape: predict the failure, autoscale the cluster, restart the pod. None of them teach the actual hard skill, which is reading a frozen pile of telemetry and reconstructing the chain of events. That skill is *epistemic*, not *control*: it's about gathering evidence, ranking hypotheses, and stopping when the story is consistent. RL has not had an environment that rewards it.
 
-**PostmortemEnv is that environment.** The agent receives a frozen 4-service architecture after an outage and a budget of investigation steps. It picks a service to query logs for. It diffs a commit. It traces a request. It hypothesizes a root cause and gets a binary "warmer / colder." When it's confident, it submits — and the deterministic grader scores both the cause it named and the causal chain it reconstructed. The reward signal cleanly separates a flailing agent from a thoughtful one (Random: 0.10, Oracle: 0.98 — see numbers below). That gap is what makes the environment trainable.
+**PostmortemEnv is that environment.** The agent receives a frozen 4-service architecture after an outage and a budget of investigation steps. It picks a service to query logs for. It diffs a commit. It traces a request. It hypothesises a root cause and gets a "warmer / colder" signal. When it is confident, it submits — and the deterministic grader scores both the cause it named and the causal chain it reconstructed. The reward signal cleanly separates a flailing agent from a thoughtful one (Random: 0.10, Oracle: 0.98 — see numbers below). That gap is what makes the environment trainable.
 
 > *"This is the first benchmark we've found where 'guess the answer' literally cannot beat 'do the work,' because the work is what produces information."* — our team at hour 30 of the build.
 
@@ -122,7 +124,7 @@ docker build -t postmortemenv .
 docker run -p 7860:7860 postmortemenv
 ```
 
-The full SFT training notebook is in [`train_notebook.py`](train_notebook.py), designed for Google Colab T4.
+The full SFT training notebook is in [`train_notebook.py`](train_notebook.py) (and the Colab-ready [`train_notebook.ipynb`](train_notebook.ipynb)), designed for Google Colab T4. The deployed Space lives at <https://huggingface.co/spaces/Auenchanters/postmortemenv>.
 
 ---
 

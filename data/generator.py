@@ -5,6 +5,7 @@ Loads curated scenario JSON files and procedurally generated scenarios.
 Supports both hand-crafted fixtures AND seed-based generation.
 """
 
+import functools
 import json
 import os
 from pathlib import Path
@@ -30,6 +31,17 @@ SOLUTION_FILES = {
 }
 
 
+@functools.lru_cache(maxsize=8)
+def _read_json_cached(path_str: str) -> str:
+    """Cache the *raw* JSON text for the 3 hand-crafted scenarios + 3
+    solutions. Returning text instead of the parsed dict is intentional —
+    callers ``json.loads`` it to get a fresh, mutation-safe dict every
+    time, while still skipping the disk read after the first call.
+    """
+    with open(path_str, "r", encoding="utf-8") as f:
+        return f.read()
+
+
 def load_scenario(task_id: str) -> Dict[str, Any]:
     """
     Load a scenario by task_id.
@@ -37,11 +49,10 @@ def load_scenario(task_id: str) -> Dict[str, Any]:
     First checks hand-crafted scenarios, then generated ones,
     then tries procedural generation on-the-fly for seed_* IDs.
     """
-    # 1) Hand-crafted
+    # 1) Hand-crafted (cached on disk-read since the 3 fixture files never change)
     if task_id in SCENARIO_FILES:
         scenario_path = SCENARIOS_DIR / SCENARIO_FILES[task_id]
-        with open(scenario_path, "r", encoding="utf-8") as f:
-            return json.load(f)
+        return json.loads(_read_json_cached(str(scenario_path)))
 
     # 2) Pre-generated
     gen_path = GENERATED_DIR / "scenarios" / f"{task_id}.json"
@@ -68,11 +79,10 @@ def load_scenario(task_id: str) -> Dict[str, Any]:
 
 def load_solution(task_id: str) -> Dict[str, Any]:
     """Load the oracle solution for a task."""
-    # 1) Hand-crafted
+    # 1) Hand-crafted (cached on disk-read since the 3 fixture files never change)
     if task_id in SOLUTION_FILES:
         solution_path = SOLUTIONS_DIR / SOLUTION_FILES[task_id]
-        with open(solution_path, "r", encoding="utf-8") as f:
-            return json.load(f)
+        return json.loads(_read_json_cached(str(solution_path)))
 
     # 2) Pre-generated
     gen_path = GENERATED_DIR / "solutions" / f"{task_id}_solution.json"
