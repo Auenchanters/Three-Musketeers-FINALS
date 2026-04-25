@@ -1,5 +1,6 @@
 {
   "task_id": "task1_recent_deploy",
+  "task_name": "5xx Spike After Recent Deploy",
   "task_difficulty": "easy",
   "task_description": "The 'data' service experienced a sudden spike in 5xx errors at 14:03 UTC, lasting approximately 9 minutes. All four services in the stack (frontend -> auth -> data -> batch) are potentially affected. A total of 10 commits were deployed across services in the last 24 hours. Your job: identify the specific root cause (a commit, config change, or infra event) and submit your answer.",
   "max_steps": 40,

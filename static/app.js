@@ -448,21 +448,37 @@ function bindRunForm() {
 async function startRun() {
   if (!state.selectedTaskId) {
     setStatus("Pick a scenario first.", "error");
+    showStreamBanner(
+      "Pick a scenario before running.",
+      "Use the Scenario dropdown above to choose a frozen incident.",
+    );
     return;
   }
   if (!state.selectedModelId) {
     setStatus("Pick a model first.", "error");
+    showStreamBanner(
+      "Pick a model before running.",
+      "Use the Model dropdown above; the default Qwen2.5 1.5B is a good starting point.",
+    );
     return;
   }
   const model = state.models.find((m) => m.id === state.selectedModelId);
   if (!model) {
     setStatus("Selected model is no longer available.", "error");
+    showStreamBanner("Selected model is no longer available.", "Refresh the page and pick another.");
     return;
   }
   const needsToken = model.tier === "paid" || (model.tier === "free" && !state.freeTierAvailable);
   const hfToken = $("hfToken").value.trim();
   if (needsToken && !hfToken) {
+    const reason = model.tier === "paid"
+      ? `${model.display_name} is a paid-tier model (~$${model.est_cost_usd.toFixed(2)}/run) so we never charge it to the shared free tier.`
+      : `This deployment doesn't have a server-side HuggingFace token configured, so even free-tier models need yours.`;
     setStatus("This model needs your HuggingFace token.", "error");
+    showStreamBanner(
+      "HuggingFace token required to start this run.",
+      `${reason} Paste a token from huggingface.co/settings/tokens (with Inference permission) into the field above, then press Run again. Tokens are used once and never stored.`,
+    );
     $("hfToken").focus();
     return;
   }
@@ -507,6 +523,21 @@ async function startRun() {
     subscribe(run_id);
   } catch (e) {
     setStatus(`Failed to start: ${e.message}`, "error");
+    // Surface the failure inside the live investigation panel too, so a
+    // user who scrolled past the run-config never sees it sitting empty
+    // wondering what's happening. Most common failure modes here are:
+    //   - 401/403 (token rejected)
+    //   - 400 with "Model X is paid-tier" (server-side validation)
+    //   - 503/504 (HF Inference cold-start or queue saturation)
+    const m = String(e.message || "");
+    const isAuth = /401|403|unauthor|invalid token|token/i.test(m);
+    const is5xx = /50[0-9]/.test(m);
+    const hint = isAuth
+      ? "Double-check your HuggingFace token has Inference permission, then try again."
+      : is5xx
+        ? "Hugging Face Inference is throttled or cold-starting; wait ~30s and retry, or pick a different free-tier model."
+        : "Try a different model or scenario, or check the browser console for details.";
+    showStreamBanner(`Failed to start run: ${m}`, hint);
     resetRunButton();
   }
 }
@@ -968,6 +999,12 @@ function showStreamBanner(message, hint) {
 }
 
 function shortTaskName(tid) {
+  // Prefer the human-readable `task_name` from the scenario JSON
+  // (loaded into state.tasks at startup). Falls back to a slug-cleanup
+  // for safety when state.tasks isn't populated yet (e.g. during the
+  // very first SSE event before /api/tasks resolves).
+  const t = state.tasks.find((x) => x.task_id === tid);
+  if (t && t.name && t.name !== tid) return t.name;
   return tid.replace(/^task\d+_/, "").replace(/_/g, " ");
 }
 

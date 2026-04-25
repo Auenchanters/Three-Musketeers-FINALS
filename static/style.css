@@ -394,7 +394,11 @@ kbd {
     "banner banner banner";
 }
 
-@media (max-width: 900px) {
+/* Stack the 3-column run-panel earlier (1100px instead of 900px). The
+   3-col layout (model / task / go) needs ~360px per column to breathe;
+   below 1100 the model column squeezes under 280px and the chip + name
+   start fighting for room (visible in HF Spaces' embedded narrow view). */
+@media (max-width: 1100px) {
   .run-panel {
     grid-template-columns: 1fr;
     grid-template-areas:
@@ -446,6 +450,11 @@ kbd {
   font-size: 13px;
   color: var(--ink-muted);
   line-height: 1.45;
+  /* Prevent character-by-character break when the run-panel grid column
+     squeezes inside a narrow viewport (e.g. HF Spaces embedded view). */
+  min-width: 0;
+  overflow-wrap: break-word;
+  word-break: normal;
 }
 
 /* ---------- Combobox (model selector) ------------------------------------- */
@@ -561,9 +570,14 @@ kbd {
   font-size: 14px;
   color: var(--ink);
   display: flex;
-  align-items: center;
+  align-items: baseline;
   gap: 8px;
   flex-wrap: wrap;
+  /* min-width:0 + overflow-wrap stops the inner text from breaking
+     character-by-character when the parent grid column shrinks (e.g.
+     when the page renders inside a narrow HF Spaces iframe). */
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 .model-meta {
   font-family: "JetBrains Mono", ui-monospace, monospace;
@@ -594,10 +608,24 @@ kbd {
   gap: 12px;
   width: 100%;
   min-width: 0;
+  /* Allow the chip to drop below the model name on very narrow widths
+     (e.g. when the Space is embedded in HF's framed iframe view) instead
+     of squishing both into single-character columns. */
+  flex-wrap: wrap;
 }
-.trigger-row .model-logo { width: 32px; height: 32px; font-size: 18px; }
-.trigger-row .model-name { font-size: 14.5px; }
+.trigger-row .model-logo {
+  width: 32px; height: 32px; font-size: 18px;
+  flex-shrink: 0;
+}
+.trigger-row .model-name {
+  font-size: 14.5px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
 .trigger-row .model-blurb { display: none; }
+.trigger-row .model-chip-cell {
+  flex-shrink: 0;
+}
 
 /* ---------- Native scenario select ---------------------------------------- */
 

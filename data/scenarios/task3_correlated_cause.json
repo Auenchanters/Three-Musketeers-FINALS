@@ -1,5 +1,6 @@
 {
   "task_id": "task3_correlated_cause",
+  "task_name": "Correlated Cause: Commit + Infra Event",
   "task_difficulty": "hard",
   "task_description": "A severe outage affected all four services starting at 03:22 UTC during a maintenance window. The incident lasted 25 minutes and exhibited unusual characteristics: neither the most recent deploy NOR the concurrent infrastructure event alone can explain the failure. The root cause is a COMBINATION of a specific commit and a specific infrastructure event that interacted non-obviously. Identify BOTH contributing causes AND reconstruct the complete causal chain.",
   "max_steps": 120,

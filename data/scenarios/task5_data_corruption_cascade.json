@@ -1,5 +1,6 @@
 {
   "task_id": "task5_data_corruption_cascade",
+  "task_name": "Silent Data Corruption Masquerading as Network Issue",
   "task_difficulty": "hard",
   "task_description": "Starting at 02:14 UTC, frontend latency p99 climbed from 180ms to 4200ms over 40 minutes. Every dashboard, every alert, every on-call instinct pointed at the network: traces showed long hops, retries piling up, downstream services 'taking forever to respond'. The infra team paged the network team, who found NOTHING wrong with packets, links, or load balancers. The real cause is upstream of the symptom: a recent change to the batch-processor silently dropped checksum verification on output payloads. The batch is now publishing records with single-byte corruption, the data-store retries the deserialization 3x per record before falling back to slow-path, and that slow-path latency PRESENTS as a network problem. Identify the actual root cause (a commit, NOT a network event) and reconstruct the chain.",
   "max_steps": 75,

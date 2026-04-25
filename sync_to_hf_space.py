@@ -97,15 +97,25 @@ def main() -> int:
         repo_id=REPO_ID,
         repo_type=REPO_TYPE,
         commit_message=(
-            "Sync GitHub main: live training panel now exposes per-rubric "
-            "breakdown in the SSE done event (cause/chain/efficiency/"
-            "investigation/anti-gaming) so judges see *why* the score caps "
-            "near 0.66 - the policy nails 4/5 rubrics at ~1.0; the only gap "
-            "is chain_accuracy (NLP-level effect-string extraction). UI "
-            "renders the breakdown as a table below the chart and shows "
-            "policy_kind in the status. Multi-seed (3 seeds x 5 tasks) "
-            "headline: trained 0.654+/-0.008, lift +0.382+/-0.019. "
-            "141 tests pass."
+            "Sync GitHub main: UX fixes for the run-investigation flow. "
+            "(1) All 5 scenarios now expose human-readable task_name "
+            "(e.g. '5xx Spike After Recent Deploy', 'Multi-Region JWT "
+            "Failover Drift') so the dropdown, live-investigation header, "
+            "training selector, recent-runs list, and curriculum panel "
+            "stop showing slugs like task1_recent_deploy. "
+            "(2) Live investigation panel now surfaces a clear inline "
+            "error banner (with actionable hint) when the run can't "
+            "start - HF token missing, 401, 503, etc - instead of "
+            "leaving the panel sitting empty saying 'Ready when you "
+            "are'. (3) Model card no longer collapses into single-"
+            "character columns at narrow viewports (HF Spaces' "
+            "embedded iframe view): trigger row now flex-wraps so the "
+            "chip drops below the name instead of squishing it; "
+            "min-width:0 + overflow-wrap on text containers; run-panel "
+            "stacks at <1100px instead of <900px. (4) Backend: free-tier "
+            "models on a server without HF_TOKEN now accept a "
+            "user-supplied hf_token as fallback, so users with their "
+            "own credits can still run them. 141 tests pass."
         ),
         ignore_patterns=IGNORE,
     )

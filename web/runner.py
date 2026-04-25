@@ -134,17 +134,25 @@ def _make_agent(body: StartRunBody):
                 400, f"Unknown model_id: {body.model_id!r}. See GET /api/models."
             )
         if info.tier == "free":
+            # Order of preference for free-tier models:
+            #   1. The user's own hf_token if they supplied one (lets a user
+            #      with credits run on a server that has no shared HF_TOKEN).
+            #   2. The server's HF_TOKEN / HUGGINGFACE_TOKEN env var (the
+            #      "free tier" path that doesn't require a per-user token).
+            # Only error out if BOTH are missing.
             server_token = os.environ.get("HF_TOKEN") or os.environ.get(
                 "HUGGINGFACE_TOKEN"
             )
-            if not server_token:
+            chosen = body.hf_token or server_token
+            if not chosen:
                 raise HTTPException(
                     503,
-                    "Free tier disabled on this deployment: set HF_TOKEN on the "
-                    "server, or pick a paid model and supply your own HF token.",
+                    "Free tier disabled on this deployment: paste your own HF "
+                    "token in the credential card, or ask the operator to set "
+                    "HF_TOKEN on the server.",
                 )
             return HFInferenceAgent(
-                repo=info.repo, token=server_token, model_id=info.id
+                repo=info.repo, token=chosen, model_id=info.id
             )
         # paid tier — user must bring their own token
         if not body.hf_token:

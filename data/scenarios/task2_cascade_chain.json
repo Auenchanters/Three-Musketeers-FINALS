@@ -1,5 +1,6 @@
 {
   "task_id": "task2_cascade_chain",
+  "task_name": "Cascade Through Service Dependencies",
   "task_difficulty": "medium",
   "task_description": "A cascading outage affected all four services (frontend -> auth -> data -> batch). The incident started at 09:15 UTC and lasted 18 minutes. Error rates spiked across multiple services in sequence. The root cause is either a commit or config change in an upstream service that triggered a cascade through the dependency graph. Identify the root cause AND reconstruct the full causal chain of how the failure propagated.",
   "max_steps": 75,

@@ -1,5 +1,6 @@
 {
   "task_id": "task4_multi_region_failover",
+  "task_name": "Multi-Region JWT Failover Drift",
   "task_difficulty": "hard",
   "task_description": "On 2026-04-19 starting at 09:00 UTC, frontend-us users began seeing intermittent 401 'token invalid' errors lasting roughly 90 seconds out of every hour, on the hour. The 12-service architecture spans two regions (us-east, eu-west) with two AZs each. Both regions share a global JWT signing key. SLO error budget is being burned at 4x the normal rate. Most engineers initially blamed DNS TTL refresh — the timing matches DNS update cycles to the second. The rolling failures clear on their own and never repro deterministically in staging. Identify the COMBINED root cause (it is correlated: a recent code change interacting with a routine infrastructure rhythm) AND reconstruct the causal chain.",
   "max_steps": 120,
