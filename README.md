@@ -93,27 +93,30 @@ The same UI also exposes the curriculum's ELO state — a fresh agent gets pushe
 
 ## Headline benchmark
 
-| Agent | Mean reward (10 seeds × 3 difficulties) | Notes |
+| Agent | Mean reward (n seeds × 3 difficulties) | Notes |
 |---|---:|---|
-| Random baseline | **0.101** | Lower bound — proves the env has signal |
-| SFT (Qwen2.5-1.5B-Instruct, 60 demos, 3 epochs) | _populated by `python train.py full`_ | One command on a CUDA box runs collect → SFT → evaluate → plot end-to-end. The merged row lands in [`training_data/evaluation_results.json`](training_data/evaluation_results.json). |
-| **Oracle (deterministic optimal)** | **0.979** | Upper bound — our hand-built solver |
-| **Reward gap (Oracle − Random)** | **0.878** | The training headroom available to any policy |
+| Random baseline | **0.230** (4 seeds) | Lower bound — proves the env has signal |
+| Qwen2.5-3B-Instruct, base (no SFT) | **0.276** (4 seeds) | A frozen instruct model already beats random by following the JSON contract |
+| Qwen2.5-3B-Instruct + LoRA SFT (60 demos, 6 ep) | **0.274** (4 seeds) | LoRA r=16, bf16 on L4. Loss converges (1.371 → 1.028, +1.6 pp token accuracy) but the policy doesn't move past the base — 60 demos is a known-too-small SFT corpus for the multi-step investigation pattern. Adapter lives at [`Auenchanters/postmortemenv-qwen3b-full`](https://huggingface.co/Auenchanters/postmortemenv-qwen3b-full); reproduce with `BASE_MODEL=Qwen/Qwen2.5-3B-Instruct hf jobs run …` (see [`scripts/hf_job_train.py`](scripts/hf_job_train.py)). The honest take: this hackathon run shows the *pipeline* works end-to-end on real GPU hardware; closing the gap to oracle is the next-week task (more demos → GRPO on top, see roadmap). |
+| **Oracle (deterministic optimal)** | **0.934** (4 seeds) | Upper bound — our hand-built solver |
+| **Reward gap (Oracle − Random)** | **0.704** | The training headroom available to any policy |
 
 Source: [`training_data/evaluation_results.json`](training_data/evaluation_results.json) (Random + Oracle rows are committed; the SFT row appears after `python train.py full` finishes). A real SFT run also writes [`training_data/loss_curve.png`](training_data/loss_curve.png) from `trainer.state.log_history` — no fabricated artifact, the file simply does not exist until the run does.
 
-### Per-difficulty breakdown
+### Per-difficulty breakdown (Qwen-3B GPU run)
 
 | Agent | Easy | Medium | Hard | Overall |
 |-------|------|--------|------|---------|
-| Random | 0.099 | 0.095 | 0.108 | **0.101** |
-| Oracle | 0.967 | 0.981 | 0.989 | **0.979** |
-| **Gap** | **0.868** | **0.886** | **0.881** | **0.878** |
+| Random                    | 0.218 | 0.226 | 0.246 | **0.230** |
+| Qwen-3B base              | 0.264 | 0.281 | 0.282 | **0.276** |
+| Qwen-3B + LoRA SFT        | 0.261 | 0.281 | 0.281 | **0.274** |
+| Oracle                    | 0.930 | 0.936 | 0.937 | **0.934** |
+| **Gap (Oracle − Random)** | **0.712** | **0.710** | **0.691** | **0.704** |
 
 ![Per-difficulty agent comparison](training_data/agent_comparison.png)
-*Per-difficulty mean episode score (n=10 seeds × 3 difficulties). The Random baseline (coral) is statistically indistinguishable across tiers; the deterministic Oracle (steelblue) saturates near 1.0. The dashed red line marks the random ceiling — any trained policy that finishes above it is genuinely learning the investigation skill.*
+*Per-difficulty mean episode score (committed image is from a 30-episode 10-seed Random vs Oracle eval; the table above is the live 4-seed Qwen-3B vs Random vs Oracle eval pulled from [`Auenchanters/postmortemenv-qwen3b-full`](https://huggingface.co/Auenchanters/postmortemenv-qwen3b-full/blob/main/training_data/evaluation_results.json) on the Hub). The Random baseline is statistically indistinguishable across tiers; the deterministic Oracle saturates near 1.0. Any trained policy that finishes above the random ceiling is genuinely learning the investigation skill — the next iteration of the SFT run (more demos, higher LoRA rank, then GRPO) is the route to that line.*
 
-> **A note on honesty.** Our previous SFT artifact (a `facebook/opt-125m` run) showed identical 0.160 means across all four epochs, meaning training never affected the policy's outputs. We deleted it rather than ship a phantom result. The pipeline is fully wired (see "Train your own agent" below); the SFT row in the table will fill in once the GPU run lands. Frontier-model rows (Claude Haiku, GPT-4o-mini, Llama-3.2-1B) are produced by [`scripts/run_frontier_benchmark.py`](scripts/run_frontier_benchmark.py) after exporting `ANTHROPIC_API_KEY` / `OPENAI_API_KEY`.
+> **A note on honesty.** The Qwen-3B SFT row (0.274) is the *real* result from a 24-minute L4 run on Hugging Face Jobs — same number you get if you re-run the job. Loss did converge (1.371 → 1.028 over 90 steps, see [`sft_metrics.json`](https://huggingface.co/Auenchanters/postmortemenv-qwen3b-full/blob/main/sft_metrics.json) on the Hub) but it never moved the *behavioral* needle past the base model. That's the truth. 60 oracle demos × 6 epochs is a deliberately small budget — the goal of this hackathon submission was a working pipeline (collect → SFT → eval → push) on rented GPU, not a benchmark win. Closing the 0.66 gap to oracle is the obvious next-week task: more demos (200+), higher LoRA rank (32+), and GRPO on top of the SFT'd checkpoint using the same reward signal the live REINFORCE chart uses. Frontier-model rows (Claude Haiku, GPT-4o-mini, Llama-3.2-1B) are produced by [`scripts/run_frontier_benchmark.py`](scripts/run_frontier_benchmark.py) after exporting `ANTHROPIC_API_KEY` / `OPENAI_API_KEY`.
 
 ### Live in-browser training (no GPU, no API key)
 

@@ -70,6 +70,14 @@ os.environ.setdefault("HF_HUB_ENABLE_HF_TRANSFER", "0")
 os.environ.setdefault("TRANSFORMERS_VERBOSITY", "info")
 os.environ.setdefault("HF_HUB_VERBOSITY", "info")
 os.environ.setdefault("ACCELERATE_LOG_LEVEL", "INFO")
+# NOTE: do NOT set HF_DEBUG=1 globally here. Empirically that flag *itself*
+# triggers a silent hang in `huggingface_hub` 0.36.x inside the uv-built
+# python:3.12 container — the curl-style HEAD/GET trace prints fine, then the
+# next chunk-streamed download appears to deadlock. Letting the library run in
+# its default (quiet) mode is the path that actually completes (verified by the
+# Qwen2.5-3B-Instruct full job, ID 69ed0982d2c8bd8662bce31b → COMPLETED in 24m).
+# If you need to debug a future download, set HF_DEBUG=1 in the *job* env (not
+# baked into the script) so the choice is per-run rather than implicit.
 
 
 def _heartbeat(label: str, interval: float = 30.0) -> threading.Event:
