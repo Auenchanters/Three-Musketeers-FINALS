@@ -28,6 +28,8 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from training_utils import (
     SYSTEM_PROMPT,
     action_from_dict,
+    build_chat_prompt,
+    build_chat_text,
     format_observation_compact,
     parse_action_json,
     reset_with_scenario,
@@ -188,27 +190,17 @@ def run_sft(
             demos.append(json.loads(line))
     print("Loaded %d demonstrations" % len(demos))
 
-    # Build text dataset
-    training_texts = []
-    for demo in demos:
-        conv = demo["conversation"]
-        parts = ["<s>[INST] <<SYS>>\n" + SYSTEM_PROMPT + "\n<</SYS>>\n\n"]
-        for j in range(0, len(conv) - 1, 2):
-            user_msg = conv[j]["content"]
-            asst_msg = conv[j + 1]["content"] if j + 1 < len(conv) else ""
-            if j == 0:
-                parts.append(user_msg + " [/INST] " + asst_msg + " </s>")
-            else:
-                parts.append("<s>[INST] " + user_msg + " [/INST] " + asst_msg + " </s>")
-        training_texts.append("".join(parts))
-
-    dataset = Dataset.from_dict({"text": training_texts})
-    print("Dataset size: %d examples" % len(dataset))
-
-    # Model + Tokenizer
+    # Tokenizer first so we can render with the model's own chat template.
+    # Llama-3 / Qwen / Mistral / Gemma / Phi-3 all expose `apply_chat_template`,
+    # so the same code path works for any modern instruct model and avoids
+    # leaking Llama-2 [INST] markers into a Llama-3 completion.
     tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
+
+    training_texts = [build_chat_text(tokenizer, demo["conversation"]) for demo in demos]
+    dataset = Dataset.from_dict({"text": training_texts})
+    print("Dataset size: %d examples" % len(dataset))
 
     # LoRA config for memory efficiency
     lora_config = LoraConfig(
@@ -246,13 +238,18 @@ def run_sft(
         trust_remote_code=True,
     )
 
-    trainer = SFTTrainer(
-        model=model,
-        args=training_args,
-        train_dataset=dataset,
-        tokenizer=tokenizer,
-        peft_config=lora_config,
-    )
+    # `processing_class=` is the supported keyword in TRL >= 0.13;
+    # the legacy `tokenizer=` keyword raises in newer versions.
+    sft_kwargs = {
+        "model": model,
+        "args": training_args,
+        "train_dataset": dataset,
+        "peft_config": lora_config,
+    }
+    try:
+        trainer = SFTTrainer(processing_class=tokenizer, **sft_kwargs)
+    except TypeError:
+        trainer = SFTTrainer(tokenizer=tokenizer, **sft_kwargs)
 
     print("Training...")
     trainer.train()
@@ -631,16 +628,7 @@ def evaluate_trained_model(model_name: str, n_seeds: int = 10) -> dict:
 
             for _ in range(scenario.get("max_steps", 40)):
                 obs_text = _format_obs_compact(obs_dict)
-                messages = [
-                    {"role": "system", "content": SYSTEM_PROMPT},
-                    {"role": "user", "content": obs_text},
-                ]
-                try:
-                    prompt = tokenizer.apply_chat_template(
-                        messages, tokenize=False, add_generation_prompt=True
-                    )
-                except Exception:
-                    prompt = "[INST] " + SYSTEM_PROMPT + "\n" + obs_text + " [/INST]"
+                prompt = build_chat_prompt(tokenizer, obs_text)
 
                 inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
                 with __import__("torch").no_grad():
@@ -654,23 +642,9 @@ def evaluate_trained_model(model_name: str, n_seeds: int = 10) -> dict:
                     output_ids[0][inputs["input_ids"].shape[1]:], skip_special_tokens=True
                 )
 
-                # Parse JSON action from model output
                 try:
-                    start = text.find("{")
-                    end = text.rfind("}") + 1
-                    action_dict = json.loads(text[start:end]) if start >= 0 and end > start else {}
-                    action_type = action_dict.get("action_type", "submit")
-                    action = Action(
-                        action_type=action_type,
-                        service=action_dict.get("service"),
-                        keyword=action_dict.get("keyword"),
-                        commit_hash=action_dict.get("commit_hash"),
-                        trace_id=action_dict.get("trace_id"),
-                        cause_entity_id=action_dict.get("cause_entity_id"),
-                        final_cause=action_dict.get("final_cause"),
-                        final_chain=action_dict.get("final_chain"),
-                        chain=action_dict.get("chain"),
-                    )
+                    action_dict = parse_action_json(text, fallback={"action_type": "submit"})
+                    action = action_from_dict(action_dict)
                     obs = env.step(action)
                     episode_rewards.append(obs.reward)
                     obs_dict = obs.model_dump()
@@ -748,16 +722,7 @@ def collect_trace(model_name: str, task_id: str = "task1_recent_deploy") -> str:
     for _ in range(scenario.get("max_steps", 40)):
         step += 1
         obs_text = _format_obs_compact(obs_dict)
-        messages = [
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": obs_text},
-        ]
-        try:
-            prompt = tokenizer.apply_chat_template(
-                messages, tokenize=False, add_generation_prompt=True
-            )
-        except Exception:
-            prompt = "[INST] " + SYSTEM_PROMPT + "\n" + obs_text + " [/INST]"
+        prompt = build_chat_prompt(tokenizer, obs_text)
 
         inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
         with torch.no_grad():
@@ -770,21 +735,9 @@ def collect_trace(model_name: str, task_id: str = "task1_recent_deploy") -> str:
         )
 
         try:
-            start = text.find("{")
-            end = text.rfind("}") + 1
-            action_dict = json.loads(text[start:end]) if start >= 0 and end > start else {}
+            action_dict = parse_action_json(text, fallback={"action_type": "submit"})
             action_type = action_dict.get("action_type", "submit")
-            action = Action(
-                action_type=action_type,
-                service=action_dict.get("service"),
-                keyword=action_dict.get("keyword"),
-                commit_hash=action_dict.get("commit_hash"),
-                trace_id=action_dict.get("trace_id"),
-                cause_entity_id=action_dict.get("cause_entity_id"),
-                final_cause=action_dict.get("final_cause"),
-                final_chain=action_dict.get("final_chain"),
-                chain=action_dict.get("chain"),
-            )
+            action = action_from_dict(action_dict)
             obs = env.step(action)
             reward = obs.reward
             obs_dict = obs.model_dump()
@@ -930,38 +883,45 @@ def _mean_score(agent_results: list) -> float:
 
 
 def _average_rewards(agent_results):
-    """Average cumulative rewards across episodes."""
+    """Average cumulative reward at every step across episodes.
+
+    Episodes that finished early carry their last cumulative value forward so
+    short and long episodes are compared apples-to-apples (otherwise the
+    average would dip when long-running episodes pull in zeros for the early
+    finishers). Episodes that recorded zero steps contribute ``0`` at every
+    position rather than being silently dropped — that way the denominator is
+    a stable count of the number of episodes, not a step-dependent count.
+    """
     if not agent_results:
         return []
-        
-    # First, calculate cumulative rewards for each episode independently
+
     cumulative_episodes = []
     max_len = 0
     for r in agent_results:
         rewards = r.get("rewards", [])
         if not rewards:
-            cumulative_episodes.append([])
+            cumulative_episodes.append([0.0])
             continue
-        
-        max_len = max(max_len, len(rewards))
+
         cum_list = []
-        current_sum = 0
+        current_sum = 0.0
         for val in rewards:
-            current_sum += val
+            current_sum += float(val)
             cum_list.append(current_sum)
         cumulative_episodes.append(cum_list)
-        
-    # Then average the cumulative sums across episodes step by step
+        if len(cum_list) > max_len:
+            max_len = len(cum_list)
+
+    if max_len == 0:
+        return []
+
+    n = len(cumulative_episodes)
     avg = []
     for step in range(max_len):
-        vals = []
+        total = 0.0
         for ep_cum in cumulative_episodes:
-            if step < len(ep_cum):
-                vals.append(ep_cum[step])
-            elif ep_cum:
-                # If the episode finished early, carry over its final cumulative score
-                vals.append(ep_cum[-1])
-        avg.append(sum(vals) / len(vals) if vals else 0)
+            total += ep_cum[step] if step < len(ep_cum) else ep_cum[-1]
+        avg.append(total / n)
     return avg
 
 

@@ -128,3 +128,58 @@ def action_from_dict(action_dict: dict[str, Any]) -> Action:
         final_chain=action_dict.get("final_chain"),
         reason=action_dict.get("reason"),
     )
+
+
+def build_chat_text(tokenizer: Any, conversation: list[dict[str, str]]) -> str:
+    """Render a (system + alternating user/assistant) trace using the model's
+    own chat template.
+
+    Llama-3, Qwen, Mistral, Gemma, Phi-3 all register a chat template via
+    :py:meth:`PreTrainedTokenizer.apply_chat_template`. Using it instead of a
+    hard-coded Llama-2 ``[INST]<<SYS>>`` string is essential when training a
+    Llama-3 model on Llama-2 markers will leak into completions and hurt
+    quality.
+
+    ``conversation`` is a list of ``{"role", "content"}`` dicts as produced by
+    :func:`train.collect_demonstrations`. A leading ``"system"`` message with
+    :data:`SYSTEM_PROMPT` is inserted automatically.
+    """
+    messages: list[dict[str, str]] = [{"role": "system", "content": SYSTEM_PROMPT}]
+    messages.extend(conversation)
+
+    apply = getattr(tokenizer, "apply_chat_template", None)
+    if apply is not None and getattr(tokenizer, "chat_template", None):
+        try:
+            return apply(messages, tokenize=False, add_generation_prompt=False)
+        except (ValueError, TypeError):
+            pass
+
+    parts = [f"<s>[INST] <<SYS>>\n{SYSTEM_PROMPT}\n<</SYS>>\n\n"]
+    for j in range(0, len(conversation) - 1, 2):
+        user_msg = conversation[j]["content"]
+        asst_msg = conversation[j + 1]["content"] if j + 1 < len(conversation) else ""
+        if j == 0:
+            parts.append(f"{user_msg} [/INST] {asst_msg} </s>")
+        else:
+            parts.append(f"<s>[INST] {user_msg} [/INST] {asst_msg} </s>")
+    return "".join(parts)
+
+
+def build_chat_prompt(tokenizer: Any, observation_text: str) -> str:
+    """Build an inference prompt for one observation using the chat template.
+
+    Mirrors :func:`build_chat_text` but adds the assistant generation prompt so
+    the model continues with its JSON action.
+    """
+    messages = [
+        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "user", "content": observation_text},
+    ]
+    apply = getattr(tokenizer, "apply_chat_template", None)
+    if apply is not None and getattr(tokenizer, "chat_template", None):
+        try:
+            return apply(messages, tokenize=False, add_generation_prompt=True)
+        except (ValueError, TypeError):
+            pass
+
+    return f"<s>[INST] <<SYS>>\n{SYSTEM_PROMPT}\n<</SYS>>\n\n{observation_text} [/INST]"

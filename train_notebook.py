@@ -54,7 +54,12 @@ print(f"  Result: {obs.query_result[:200]}")
 # %%
 # Cell 4: Collect oracle demonstrations
 from train import collect_demonstrations, evaluate_agents, _reset_with_scenario, _format_obs_compact
-from training_utils import SYSTEM_PROMPT, action_from_dict, parse_action_json
+from training_utils import (
+    SYSTEM_PROMPT,
+    action_from_dict,
+    build_chat_prompt,
+    parse_action_json,
+)
 
 demos_path = collect_demonstrations(n_seeds=20, output_path="training_data")
 print(f"\nDemonstrations saved to: {demos_path}")
@@ -118,8 +123,10 @@ sft_model.eval()
 
 def _sample_action(obs_text: str) -> dict:
     """Run the SFT model once and parse the first JSON object it emits."""
-    prompt = f"<s>[INST] <<SYS>>\n{SYSTEM_PROMPT}\n<</SYS>>\n\n{obs_text} [/INST]"
-    inputs = tokenizer(prompt, return_tensors="pt", truncation=True, max_length=1800).to(sft_model.device)
+    # Use the model's own chat template (Llama-3 has its own format; using
+    # Llama-2 [INST] markers here would wreck a Llama-3 / Qwen / Mistral run).
+    prompt = build_chat_prompt(tokenizer, obs_text)
+    inputs = tokenizer(prompt, return_tensors="pt", truncation=True, max_length=2048).to(sft_model.device)
     with torch.no_grad():
         out = sft_model.generate(
             **inputs,
@@ -264,7 +271,7 @@ if eval_path.exists():
             sres = json.load(f)
         s_mean = sum(r["score"] for r in sres) / len(sres)
         print(f"  SFT:     {s_mean:.3f}  (lift over random: +{s_mean - r_mean:.3f})")
-    print("  Oracle:  {o_mean:.3f}")
+    print(f"  Oracle:  {o_mean:.3f}")
     print()
     print("  The GRPO loop provides the RL self-improvement signal")
     print("  the 20% rubric item asks for, driven by the deterministic environment reward.")

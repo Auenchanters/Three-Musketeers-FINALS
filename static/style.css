@@ -3,7 +3,8 @@
    Industrial minimalism: monochrome grayscale hierarchy,
    single red accent (#D71921) reserved for interrupts/errors.
    No shadows, no gradients on chrome, no backdrop blur,
-   no pulse/bounce, no toasts.
+   no pulse/bounce. Toasts are intentionally bottom-right
+   and rendered with the same monospaced typography.
 
    Design tokens adapted from dominikmartn/nothing-design-skill
    (MIT License, Copyright 2026 Dominik Martin).

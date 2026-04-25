@@ -18,3 +18,6 @@ venv/
 .ruff_cache/
 training_data/curriculum_state.json
 training_data/runs/
+data/generated/
+sft_output/
+grpo_output/
