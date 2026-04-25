@@ -28,7 +28,18 @@ class Observation(BaseObservation):
     known_facts: List[str] = Field(default_factory=list, description="Facts the agent has confirmed so far")
     service_graph: Dict[str, List[str]] = Field(
         default_factory=dict,
-        description="Service dependency DAG: service_name -> [upstream_dependencies]"
+        description=(
+            "Service dependency DAG: service_name -> [upstream_dependencies]. "
+            "In narrative mode, this is initially empty and the agent must "
+            "issue 'discover_topology' actions to incrementally reveal it."
+        )
+    )
+    narrative_mode: bool = Field(
+        default=False,
+        description=(
+            "When True, the dependency graph starts hidden and is partially "
+            "revealed via 'discover_topology' actions (real partial observability)."
+        )
     )
     services: List[Service] = Field(default_factory=list, description="Services involved in the incident")
     incident_window: Dict[str, str] = Field(

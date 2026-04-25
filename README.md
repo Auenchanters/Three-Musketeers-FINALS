@@ -41,7 +41,7 @@ That doc is the entire job. The frozen telemetry — logs, traces, deploys, conf
 
 ## Why we built this
 
-Two of us have been on-call. One of us has watched a teammate cry at 4 AM after a billing-system outage they couldn't explain to leadership the next morning. Every existing RL-for-LLMs benchmark we looked at — SWE-bench, WebArena, ALFWorld — rewards an agent for **changing** the world: pass a test, click a button, pick up a mug. None of them reward the part of operations work that actually consumes engineer-years: **reading evidence after the fact and writing down what happened.**
+All three of us have been on-call. One of us has watched a teammate cry at 4 AM after a billing-system outage they couldn't explain to leadership the next morning. Every existing RL-for-LLMs benchmark we looked at — SWE-bench, WebArena, ALFWorld — rewards an agent for **changing** the world: pass a test, click a button, pick up a mug. None of them reward the part of operations work that actually consumes engineer-years: **reading evidence after the fact and writing down what happened.**
 
 We built PostmortemEnv because we wanted to know whether a small open-weight model could be trained to do that. The answer turned out to be "yes, the environment is trainable, the gap is 0.88, and we built the entire pipeline to prove it." This README walks you through the proof.
 

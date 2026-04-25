@@ -1,0 +1,119 @@
+{
+  "task_id": "task5_data_corruption_cascade",
+  "task_difficulty": "hard",
+  "task_description": "Starting at 02:14 UTC, frontend latency p99 climbed from 180ms to 4200ms over 40 minutes. Every dashboard, every alert, every on-call instinct pointed at the network: traces showed long hops, retries piling up, downstream services 'taking forever to respond'. The infra team paged the network team, who found NOTHING wrong with packets, links, or load balancers. The real cause is upstream of the symptom: a recent change to the batch-processor silently dropped checksum verification on output payloads. The batch is now publishing records with single-byte corruption, the data-store retries the deserialization 3x per record before falling back to slow-path, and that slow-path latency PRESENTS as a network problem. Identify the actual root cause (a commit, NOT a network event) and reconstruct the chain.",
+  "max_steps": 75,
+  "service_graph": {
+    "frontend": ["api"],
+    "api": ["data-store"],
+    "data-store": ["batch-processor"],
+    "batch-processor": ["archive"],
+    "archive": []
+  },
+  "services": [
+    {"name": "frontend", "status": "degraded", "dependencies": ["api"], "recent_deploy_count": 0, "error_rate_during_incident": 4.2},
+    {"name": "api", "status": "degraded", "dependencies": ["data-store"], "recent_deploy_count": 1, "error_rate_during_incident": 6.8},
+    {"name": "data-store", "status": "degraded", "dependencies": ["batch-processor"], "recent_deploy_count": 0, "error_rate_during_incident": 18.4},
+    {"name": "batch-processor", "status": "healthy", "dependencies": ["archive"], "recent_deploy_count": 2, "error_rate_during_incident": 0.7},
+    {"name": "archive", "status": "healthy", "dependencies": [], "recent_deploy_count": 0, "error_rate_during_incident": 0.1}
+  ],
+  "incident_window": {
+    "start": "2026-04-22T02:14:00Z",
+    "end": "2026-04-22T02:54:00Z"
+  },
+  "logs": {
+    "frontend": [
+      {"id": "log-fe-501", "timestamp": "2026-04-22T01:00:00Z", "level": "INFO", "message": "Latency p99 = 178ms, baseline.", "relevant": false},
+      {"id": "log-fe-502", "timestamp": "2026-04-22T02:14:00Z", "level": "WARN", "message": "Latency p99 climbing: 178ms -> 920ms over 4 minutes", "relevant": true},
+      {"id": "log-fe-503", "timestamp": "2026-04-22T02:25:00Z", "level": "WARN", "message": "Latency p99 = 2400ms. Users reporting timeouts on profile page.", "relevant": true},
+      {"id": "log-fe-504", "timestamp": "2026-04-22T02:40:00Z", "level": "ERROR", "message": "Latency p99 = 4200ms. Slack: 'is the network down?'", "relevant": true},
+      {"id": "log-fe-505", "timestamp": "2026-04-22T02:55:00Z", "level": "INFO", "message": "Latency starting to recover: p99 = 1800ms, after batch-processor was rolled back", "relevant": false}
+    ],
+    "api": [
+      {"id": "log-api-501", "timestamp": "2026-04-22T02:14:30Z", "level": "WARN", "message": "Upstream data-store latency rising: 12ms -> 380ms", "relevant": true},
+      {"id": "log-api-502", "timestamp": "2026-04-22T02:20:00Z", "level": "WARN", "message": "Upstream data-store latency = 1100ms. Retries firing on 6% of requests.", "relevant": true},
+      {"id": "log-api-503", "timestamp": "2026-04-22T02:35:00Z", "level": "ERROR", "message": "Upstream data-store latency = 3600ms. Hitting per-request timeout (5000ms) intermittently.", "relevant": true},
+      {"id": "log-api-504", "timestamp": "2026-04-22T02:45:00Z", "level": "WARN", "message": "data-store responses arriving but slow. Confirmed via traceroute: network path is FINE. Latency is in-app.", "relevant": true}
+    ],
+    "data-store": [
+      {"id": "log-ds-501", "timestamp": "2026-04-22T02:14:00Z", "level": "WARN", "message": "Deserialization failures starting on records published by batch-processor: ChecksumMismatchError on 2.1% of records", "relevant": true},
+      {"id": "log-ds-502", "timestamp": "2026-04-22T02:14:30Z", "level": "WARN", "message": "Deserialization retries (3x per record) consuming 88% of worker threads on slow-path code", "relevant": true},
+      {"id": "log-ds-503", "timestamp": "2026-04-22T02:18:00Z", "level": "ERROR", "message": "Slow-path deserialization: 4.3% of records require fallback parse. Latency on read path increasing.", "relevant": true},
+      {"id": "log-ds-504", "timestamp": "2026-04-22T02:22:00Z", "level": "ERROR", "message": "ChecksumMismatchError rate climbing to 6.8% on batch-published records. Each failure adds ~600ms via retry+fallback.", "relevant": true},
+      {"id": "log-ds-505", "timestamp": "2026-04-22T02:30:00Z", "level": "ERROR", "message": "Sample corrupted record: byte at offset 47 flipped (0x4F -> 0x5F). Looks like NOT random bit-flip — pattern resembles unverified output.", "relevant": true},
+      {"id": "log-ds-506", "timestamp": "2026-04-22T02:38:00Z", "level": "CRITICAL", "message": "ChecksumMismatchError rate = 9.4% — read path is hitting fallback on nearly 1 in 10 records. End-to-end latency on read path = 2800ms (normal: 12ms).", "relevant": true},
+      {"id": "log-ds-507", "timestamp": "2026-04-22T02:50:00Z", "level": "INFO", "message": "After batch-processor rollback at 02:48Z: ChecksumMismatchError dropping toward 0%. Latency normalizing.", "relevant": true},
+      {"id": "log-ds-508", "timestamp": "2026-04-22T01:00:00Z", "level": "INFO", "message": "Steady state: deserialization throughput 18000 rec/s, ChecksumMismatch rate <0.001%", "relevant": false}
+    ],
+    "batch-processor": [
+      {"id": "log-bp-501", "timestamp": "2026-04-22T02:08:00Z", "level": "INFO", "message": "Deployment batch-processor v7.4.0 rolled out: refactor output writer for 12% throughput improvement (PR #5612)", "relevant": true},
+      {"id": "log-bp-502", "timestamp": "2026-04-22T02:09:00Z", "level": "INFO", "message": "Throughput at 21000 rec/s — +14% vs baseline. SUCCESS.", "relevant": false},
+      {"id": "log-bp-503", "timestamp": "2026-04-22T02:14:00Z", "level": "INFO", "message": "Output writer producing records normally. Internal validation: passed.", "relevant": false},
+      {"id": "log-bp-504", "timestamp": "2026-04-22T02:30:00Z", "level": "INFO", "message": "All worker threads healthy. CPU 42%. Memory 61%. No errors emitted by us.", "relevant": false},
+      {"id": "log-bp-505", "timestamp": "2026-04-22T02:48:00Z", "level": "INFO", "message": "Manual rollback to v7.3.9 initiated by on-call after data-store correlation found.", "relevant": true},
+      {"id": "log-bp-506", "timestamp": "2026-04-22T02:50:00Z", "level": "INFO", "message": "Rolled back. Output writer using legacy path with checksum verification re-enabled.", "relevant": true}
+    ],
+    "archive": [
+      {"id": "log-arc-501", "timestamp": "2026-04-22T02:30:00Z", "level": "INFO", "message": "Archive write throughput steady at 18000 rec/s. No anomalies.", "relevant": false}
+    ]
+  },
+  "traces": [
+    {"trace_id": "trace-corr-001", "timestamp": "2026-04-22T02:30:00Z", "spans": [
+      {"service": "frontend", "operation": "GET /api/v1/profile", "duration_ms": 2820, "status": "SLOW"},
+      {"service": "api", "operation": "/internal/data-store/read", "duration_ms": 2780, "status": "SLOW"},
+      {"service": "data-store", "operation": "deserialize-record", "duration_ms": 2650, "status": "SLOW", "error": "fallback parse path: 3 ChecksumMismatchError retries"}
+    ], "relevant": true},
+    {"trace_id": "trace-corr-002", "timestamp": "2026-04-22T02:35:00Z", "spans": [
+      {"service": "frontend", "operation": "GET /api/v1/feed", "duration_ms": 3400, "status": "SLOW"},
+      {"service": "api", "operation": "/internal/data-store/read", "duration_ms": 3380, "status": "SLOW"},
+      {"service": "data-store", "operation": "deserialize-record", "duration_ms": 3320, "status": "SLOW", "error": "ChecksumMismatchError x3 then slow-path fallback"}
+    ], "relevant": true},
+    {"trace_id": "trace-corr-003", "timestamp": "2026-04-22T01:00:00Z", "spans": [
+      {"service": "frontend", "operation": "GET /api/v1/profile", "duration_ms": 168, "status": "OK"},
+      {"service": "api", "operation": "/internal/data-store/read", "duration_ms": 95, "status": "OK"},
+      {"service": "data-store", "operation": "deserialize-record", "duration_ms": 4, "status": "OK"}
+    ], "relevant": false},
+    {"trace_id": "trace-corr-004", "timestamp": "2026-04-22T02:46:00Z", "spans": [
+      {"service": "api", "operation": "/internal/data-store/read", "duration_ms": 2200, "status": "SLOW"},
+      {"service": "data-store", "operation": "deserialize-record", "duration_ms": 2180, "status": "SLOW", "error": "fallback path triggered by upstream record corruption"}
+    ], "relevant": true}
+  ],
+  "commits": [
+    {"hash": "commit-bp-writer-refactor", "service": "batch-processor", "timestamp": "2026-04-22T02:07:00Z", "author": "ravi@company.com", "message": "perf: refactor output writer for +12% throughput — drop redundant CRC32 verification step", "diff": "--- a/batch-processor/output/writer.go\n+++ b/batch-processor/output/writer.go\n@@ -55,12 +55,6 @@\n func (w *Writer) Write(rec Record) error {\n     payload := rec.Marshal()\n-    crc := crc32.ChecksumIEEE(payload)\n-    if !verifyChecksum(payload, crc) {\n-        return ChecksumVerifyError{}\n-    }\n     return w.queue.Publish(payload)\n }", "relevant": true},
+    {"hash": "commit-bp-metrics", "service": "batch-processor", "timestamp": "2026-04-21T22:00:00Z", "author": "ravi@company.com", "message": "feat: add per-worker throughput metrics", "diff": "--- a/batch-processor/metrics/worker.go\n+workerThroughput.Inc()", "relevant": false},
+    {"hash": "commit-api-cache", "service": "api", "timestamp": "2026-04-21T18:00:00Z", "author": "lin@company.com", "message": "feat: add per-route response cache (5s TTL)", "diff": "--- a/api/cache/route.go\n+cache := NewCache(5 * time.Second)", "relevant": false},
+    {"hash": "commit-bp-jobconfig", "service": "batch-processor", "timestamp": "2026-04-21T14:00:00Z", "author": "ravi@company.com", "message": "chore: bump batch worker count from 16 to 24 for upcoming load", "diff": "--- a/batch-processor/config/workers.go\n+workerCount = 24", "relevant": false}
+  ],
+  "config_changes": [
+    {"config_id": "cfg-corr-001", "service": "batch-processor", "timestamp": "2026-04-22T02:07:00Z", "key": "OUTPUT_CHECKSUM_VERIFY", "old_value": "true", "new_value": "false", "description": "Disabled output-side CRC32 verification (sibling of commit-bp-writer-refactor). The reasoning was 'redundant — downstream verifies anyway'. data-store DOES verify, but a verify failure now triggers a 3x retry + slow-path fallback, not a fast fail.", "relevant": true},
+    {"config_id": "cfg-corr-002", "service": "data-store", "timestamp": "2026-04-21T12:00:00Z", "key": "DESERIALIZE_RETRY_COUNT", "old_value": "3", "new_value": "3", "description": "Number of retries on deserialize failure before falling back to slow-path parse. Unchanged for 9 months.", "relevant": true},
+    {"config_id": "cfg-corr-003", "service": "api", "timestamp": "2026-04-21T18:00:00Z", "key": "DATA_STORE_TIMEOUT_MS", "old_value": "5000", "new_value": "5000", "description": "Data-store read timeout. Unchanged.", "relevant": false}
+  ],
+  "infra_events": [
+    {"event_id": "infra-corr-001", "timestamp": "2026-04-22T02:25:00Z", "type": "network_check", "description": "Network team paged. Investigated 02:25-02:42. Result: ALL link health, packet loss, latency, and BGP metrics nominal. NO network issue found. Symptom is in-application.", "relevant": true},
+    {"event_id": "infra-corr-002", "timestamp": "2026-04-22T02:48:00Z", "type": "rollback", "description": "On-call rolled batch-processor back to v7.3.9. data-store ChecksumMismatch rate dropped from 9.4% to <0.01% within 90s. Frontend latency normalised within 6 minutes.", "relevant": true},
+    {"event_id": "infra-corr-003", "timestamp": "2026-04-22T01:00:00Z", "type": "scaling", "description": "Routine pre-business-hours scaling.", "relevant": false}
+  ],
+  "relevant_fact_ids": [
+    "log-fe-502", "log-fe-503", "log-fe-504",
+    "log-api-501", "log-api-502", "log-api-503", "log-api-504",
+    "log-ds-501", "log-ds-502", "log-ds-503", "log-ds-504", "log-ds-505", "log-ds-506", "log-ds-507",
+    "log-bp-501", "log-bp-505", "log-bp-506",
+    "commit-bp-writer-refactor",
+    "cfg-corr-001",
+    "infra-corr-001", "infra-corr-002",
+    "trace-corr-001", "trace-corr-002", "trace-corr-004"
+  ],
+  "ground_truth": {
+    "cause": "commit-bp-writer-refactor",
+    "cause_type": "commit",
+    "explanation": "The batch-processor commit-bp-writer-refactor removed an output-side CRC32 verification step in the name of throughput. The change ships records that occasionally have single-byte corruption from in-process buffer reuse. data-store's deserializer now hits ChecksumMismatchError on ~10% of records and falls into a slow-path retry+fallback that is ~600ms per affected record. Because the symptom is high latency on the read path, traces look like network slowness — and the network team was paged first and found nothing. The classic 'symptom looks like A but cause is B' pattern: surface symptom = network/latency, actual cause = silent data corruption upstream from a checksum-removal commit. The on-call rollback at 02:48Z confirms causality (latency drops within 6 minutes).",
+    "chain": [
+      {"service": "batch-processor", "effect": "checksum_verification_removed_in_writer"},
+      {"service": "batch-processor", "effect": "publishes_records_with_silent_corruption"},
+      {"service": "data-store", "effect": "deserialize_retries_then_slow_path_fallback"},
+      {"service": "api", "effect": "data_store_read_latency_climbs"},
+      {"service": "frontend", "effect": "user_visible_latency_p99_4200ms_looks_like_network"}
+    ]
+  }
+}

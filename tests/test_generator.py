@@ -10,12 +10,16 @@ from data.generator import load_scenario, load_solution, get_available_tasks, ge
 
 
 class TestGetAvailableTasks:
-    def test_returns_three_tasks(self):
+    def test_returns_all_handcrafted_tasks(self):
         tasks = get_available_tasks()
-        assert len(tasks) == 3
+        # 3 original handcrafted tasks + 2 new ones (task4 multi-region failover,
+        # task5 data corruption cascade — added for criterion 1).
         assert "task1_recent_deploy" in tasks
         assert "task2_cascade_chain" in tasks
         assert "task3_correlated_cause" in tasks
+        assert "task4_multi_region_failover" in tasks
+        assert "task5_data_corruption_cascade" in tasks
+        assert len(tasks) == 5
 
 
 class TestLoadScenario:
@@ -44,8 +48,13 @@ class TestLoadScenario:
         with pytest.raises(ValueError):
             load_scenario("nonexistent_task")
 
-    def test_service_graph_has_four_services(self):
-        for task_id in get_available_tasks():
+    def test_canonical_tasks_have_four_services(self):
+        """The original 3 hand-crafted tasks all share the canonical
+        (frontend, auth, data, batch) topology. Tasks 4 & 5 use richer
+        topologies (12 and 5 services respectively) and are tested
+        separately."""
+        canonical = ["task1_recent_deploy", "task2_cascade_chain", "task3_correlated_cause"]
+        for task_id in canonical:
             scenario = load_scenario(task_id)
             graph = scenario["service_graph"]
             assert len(graph) == 4
@@ -53,6 +62,25 @@ class TestLoadScenario:
             assert "auth" in graph
             assert "data" in graph
             assert "batch" in graph
+
+    def test_task4_topology_is_multi_region(self):
+        scenario = load_scenario("task4_multi_region_failover")
+        graph = scenario["service_graph"]
+        # 12-service multi-region topology, 2 regions, 2 AZs each.
+        assert len(graph) == 12
+        assert "frontend-us" in graph
+        assert "frontend-eu" in graph
+        assert "auth-us" in graph
+        assert "auth-eu" in graph
+        assert "clock-sync" in graph
+        assert scenario["task_difficulty"] == "hard"
+
+    def test_task5_topology_is_linear_cascade(self):
+        scenario = load_scenario("task5_data_corruption_cascade")
+        graph = scenario["service_graph"]
+        assert "batch-processor" in graph
+        assert "data-store" in graph
+        assert scenario["task_difficulty"] == "hard"
 
     def test_has_ground_truth(self):
         for task_id in get_available_tasks():
