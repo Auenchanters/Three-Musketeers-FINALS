@@ -80,18 +80,53 @@ class TestCauseMatch:
             cause_type="correlated",
         ) is True
 
-    def test_correlated_contributing_cause(self):
+    def test_correlated_contributing_cause_is_not_full_match(self):
+        # Naming a single contributing cause is NOT a full match anymore —
+        # it routes to the partial-credit branch in compute_final_score.
+        # See analysis_results (2).md C5 for the original bug.
         assert Grader.check_cause_match(
             "commit-abc",
             "commit-abc+infra-xyz",
             cause_type="correlated",
             contributing_causes=["commit-abc", "infra-xyz"],
-        ) is True
+        ) is False
 
     def test_correlated_wrong_cause(self):
         assert Grader.check_cause_match(
             "commit-wrong",
             "commit-abc+infra-xyz",
+            cause_type="correlated",
+            contributing_causes=["commit-abc", "infra-xyz"],
+        ) is False
+
+
+class TestContributingCauseMatch:
+    def test_identifies_single_contributing_cause(self):
+        assert Grader.is_contributing_cause_match(
+            "commit-abc",
+            cause_type="correlated",
+            contributing_causes=["commit-abc", "infra-xyz"],
+        ) is True
+
+    def test_full_combined_id_is_not_contributing_only(self):
+        # is_contributing_cause_match ignores exact-match cases — those
+        # are handled by check_cause_match.
+        assert Grader.is_contributing_cause_match(
+            "commit-abc+infra-xyz",
+            cause_type="correlated",
+            contributing_causes=["commit-abc", "infra-xyz"],
+        ) is False
+
+    def test_non_correlated_returns_false(self):
+        assert Grader.is_contributing_cause_match(
+            "commit-abc",
+            cause_type="commit",
+            contributing_causes=["commit-abc"],
+        ) is False
+
+    def test_unknown_contributing_returns_false(self):
+        assert Grader.is_contributing_cause_match(
+            "commit-other",
             cause_type="correlated",
             contributing_causes=["commit-abc", "infra-xyz"],
         ) is False
