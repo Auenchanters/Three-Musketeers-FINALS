@@ -97,6 +97,14 @@ async function loadModels() {
       state.models[0];
     if (initial) applyModelSelection(initial.id);
   } catch (e) {
+    // The model trigger button still says "Loading models…" by default.
+    // Replace it with a visible failure state so the user can't silently
+    // sit on a dead dropdown wondering why nothing is selectable.
+    const trigger = $("modelTriggerContent");
+    if (trigger) {
+      trigger.innerHTML =
+        '<span class="model-load-error">Couldn\'t load models — refresh the page</span>';
+    }
     setStatus(`Failed to load models: ${e.message}`, "error");
   }
 }
@@ -111,6 +119,16 @@ async function loadTasks() {
       selectTask(state.tasks[0].task_id);
     }
   } catch (e) {
+    // Same problem as loadModels: both task selectors will sit on
+    // "Loading scenarios…" forever if /api/tasks errors. Replace the
+    // placeholder with a visible failure option in both selects.
+    for (const id of ["taskSelect", "trainingTaskSelect"]) {
+      const sel = $(id);
+      if (sel) {
+        sel.innerHTML =
+          '<option value="" disabled selected>Couldn\'t load scenarios — refresh the page</option>';
+      }
+    }
     setStatus(`Failed to load tasks: ${e.message}`, "error");
   }
 }
@@ -1069,6 +1087,10 @@ async function startTraining() {
   const taskId = sel?.value;
   if (!taskId) {
     setTrainingStatus("Pick a task first.", "error");
+    showTrainingError(
+      "Pick a task before starting training.",
+      "Use the Task dropdown above to choose a scenario.",
+    );
     return;
   }
   const nEpisodes = clamp(parseInt(epsInput?.value, 10) || 500, 50, 600);
@@ -1086,6 +1108,7 @@ async function startTraining() {
 
   resetTrainingSummary();
   resetTrainingChart();
+  clearTrainingError();
   const rubricHost = $("trainingRubrics");
   if (rubricHost) rubricHost.hidden = true;
   setTrainingStatus("Estimating random baseline…", "");
@@ -1114,7 +1137,20 @@ async function startTraining() {
     if (runtimeEl) runtimeEl.textContent = meta.runtime || "local";
     subscribeTraining(meta.session_id);
   } catch (e) {
-    setTrainingStatus(`Failed to start: ${e.message}`, "error");
+    // Don't leave the chart sitting on its placeholder ("Press Start
+    // training to begin a fresh run.") when the run actually failed —
+    // that's the same silent-failure pattern as the live-investigation
+    // panel had before we added showStreamBanner.
+    const msg = String(e.message || e);
+    const isAuth = /401|403|unauthor|token/i.test(msg);
+    const is5xx = /50[0-9]/.test(msg);
+    const hint = isAuth
+      ? "The training endpoint rejected the request. Reload the page and try again."
+      : is5xx
+        ? "Server failed to start training. Try a smaller episode count, or wait a moment and retry."
+        : "Try a different scenario or fewer episodes, or check the browser console for details.";
+    setTrainingStatus(`Failed to start: ${msg}`, "error");
+    showTrainingError(`Failed to start training: ${msg}`, hint);
     resetTrainingButton();
   }
 }
@@ -1129,7 +1165,12 @@ function subscribeTraining(sessionId) {
   es.addEventListener("error",     (e) => {
     try {
       const data = JSON.parse(e.data);
-      setTrainingStatus(data.message || "stream error", "error");
+      const msg = data.message || "stream error";
+      setTrainingStatus(msg, "error");
+      showTrainingError(
+        `Training stream failed: ${msg}`,
+        "The server closed the SSE connection. Press Start training again to retry.",
+      );
     } catch {/* heartbeat */}
     resetTrainingButton();
     es.close();
@@ -1212,6 +1253,43 @@ function resetTrainingChart() {
   host.classList.remove("has-data");
   // Keep the empty-state node, drop any prior svg.
   Array.from(host.querySelectorAll("svg")).forEach((s) => s.remove());
+}
+
+// Render an in-place error overlay inside the training chart container so a
+// failed start (HTTP 5xx, missing task, dropped SSE) is impossible to miss.
+// Without this, the chart still showed "Press Start training to begin a
+// fresh run" even after the run had blown up — same silent-failure pattern
+// we already fixed for the live-investigation panel.
+function showTrainingError(message, hint) {
+  const host = $("trainingChart");
+  if (!host) return;
+  // Drop any prior svg + the default empty-state node so the error is
+  // the only visible thing in the chart container.
+  host.classList.remove("has-data");
+  Array.from(host.querySelectorAll("svg")).forEach((s) => s.remove());
+  const empty = host.querySelector(".training-chart-empty");
+  if (empty) empty.hidden = true;
+  let err = host.querySelector(".training-chart-error");
+  if (!err) {
+    err = document.createElement("div");
+    err.className = "training-chart-error";
+    err.setAttribute("role", "alert");
+    host.appendChild(err);
+  }
+  err.innerHTML =
+    `<div class="training-chart-error-label">TRAINING ERROR</div>` +
+    `<div class="training-chart-error-msg">${escapeHtml(message)}</div>` +
+    (hint ? `<div class="training-chart-error-hint">${escapeHtml(hint)}</div>` : "");
+  err.hidden = false;
+}
+
+function clearTrainingError() {
+  const host = $("trainingChart");
+  if (!host) return;
+  const err = host.querySelector(".training-chart-error");
+  if (err) err.remove();
+  const empty = host.querySelector(".training-chart-empty");
+  if (empty) empty.hidden = false;
 }
 
 function resetTrainingSummary() {

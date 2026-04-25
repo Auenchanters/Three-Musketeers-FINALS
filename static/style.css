@@ -501,6 +501,15 @@ kbd {
   flex: 1;
 }
 
+/* Visible failure state when /api/models errors. Without this the
+   trigger button silently sits on "Loading models…" forever and the
+   user has no idea why the dropdown is dead. */
+.model-load-error {
+  color: var(--error);
+  font-weight: 600;
+  font-size: 13.5px;
+}
+
 .combobox-listbox {
   position: absolute;
   top: calc(100% + 6px);
@@ -733,6 +742,9 @@ kbd {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  /* Cost chips like "~$1.20 / run" can wrap below the title on very
+     narrow viewports rather than squishing the title text. */
+  flex-wrap: wrap;
 }
 .cred-card h3 {
   margin: 0;
@@ -1238,17 +1250,27 @@ kbd {
 }
 .chain-item {
   display: flex;
-  align-items: center;
+  align-items: baseline;
   gap: 8px;
   padding: 8px 12px;
   background: var(--surface-2);
   border-radius: var(--radius-sm);
   font-family: "JetBrains Mono", ui-monospace, monospace;
   font-size: 12.5px;
+  /* Effect strings can be sentences ("read replicas served stale rows
+     for ~6 minutes") — without min-width:0 they'd push past the panel
+     edge when the right column collapses to full width. */
+  flex-wrap: wrap;
+  min-width: 0;
 }
-.chain-item .svc { color: var(--primary); font-weight: 600; }
-.chain-item .arrow { color: var(--ink-soft); }
-.chain-item .effect { color: var(--ink-2); }
+.chain-item .svc { color: var(--primary); font-weight: 600; flex-shrink: 0; }
+.chain-item .arrow { color: var(--ink-soft); flex-shrink: 0; }
+.chain-item .effect {
+  color: var(--ink-2);
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow-wrap: anywhere;
+}
 
 /* ---------- Service graph -------------------------------------------------- */
 
@@ -1338,15 +1360,27 @@ kbd {
   padding: 8px 14px;
   display: flex;
   justify-content: space-between;
+  align-items: baseline;
   gap: 8px;
   font-size: 12.5px;
   border-bottom: 1px solid var(--border);
+  /* Without min-width: 0 a long task name + agent type would push the
+     score chip off the right edge of the drawer instead of wrapping. */
+  min-width: 0;
 }
 .history-item:last-child { border-bottom: 0; }
-.history-item .task { color: var(--ink-2); }
+.history-item .task {
+  color: var(--ink-2);
+  /* Allow long human-readable task names ("5xx Spike After Recent
+     Deploy · oracle") to wrap inside the drawer instead of overflowing. */
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow-wrap: anywhere;
+}
 .history-item .score {
   font-family: "JetBrains Mono", ui-monospace, monospace;
   font-weight: 600;
+  flex-shrink: 0;
 }
 .history-item .score.win  { color: var(--success); }
 .history-item .score.loss { color: var(--ink-muted); }
@@ -1360,13 +1394,25 @@ kbd {
 .curriculum-row .top {
   display: flex;
   justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
   margin-bottom: 4px;
+  min-width: 0;
 }
-.curriculum-row .name { color: var(--ink); font-weight: 500; }
+.curriculum-row .name {
+  color: var(--ink);
+  font-weight: 500;
+  /* Long task names ("Multi-Region JWT Failover Drift") otherwise
+     squeeze the ELO chip out of the drawer on narrow viewports. */
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow-wrap: anywhere;
+}
 .curriculum-row .elo {
   font-family: "JetBrains Mono", ui-monospace, monospace;
   color: var(--primary);
   font-size: 11.5px;
+  flex-shrink: 0;
 }
 .curriculum-row .bot {
   display: grid;
@@ -1420,11 +1466,17 @@ kbd {
   align-items: end;
 }
 
-@media (max-width: 720px) {
+/* Stack the training toolbar earlier than the old 720px breakpoint:
+   between ~720-960px the "Start training ⇧↵" button forced the
+   Task select into a uselessly narrow strip, hiding most of each
+   scenario name. */
+@media (max-width: 960px) {
   .training-toolbar {
     grid-template-columns: 1fr;
     gap: 12px;
   }
+  .training-control-go { align-self: stretch; }
+  .training-control-go .btn { width: 100%; }
 }
 
 .training-control {
@@ -1540,6 +1592,32 @@ kbd {
   font-size: 13px;
 }
 .training-chart.has-data .training-chart-empty { display: none; }
+
+/* Inline error overlay for the training chart — same visual language as
+   the live-investigation .stream-banner so judges/users immediately
+   recognise it as a failure state instead of silently sitting on the
+   "Press Start training" placeholder. */
+.training-chart-error {
+  position: absolute;
+  inset: 12px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 6px;
+  padding: 18px 20px;
+  background: var(--error-soft);
+  border: 1px solid var(--error);
+  border-radius: var(--radius-sm);
+  color: var(--error);
+}
+.training-chart-error-label {
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-weight: 700;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+}
+.training-chart-error-msg { font-weight: 600; font-size: 14px; }
+.training-chart-error-hint { color: var(--ink-2); font-size: 13px; }
 
 /* SVG primitives ------------------------------------------------------------ */
 
