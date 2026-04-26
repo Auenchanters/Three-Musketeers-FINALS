@@ -4,204 +4,269 @@
     "seed": 42,
     "elapsed_s": 0.2,
     "episode": 500,
-    "rolling_mean": 0.6562,
-    "baseline": 0.2743,
-    "lift": 0.3819,
+    "rolling_mean": 0.8708,
+    "baseline": 0.5243,
+    "lift": 0.3466,
     "rubric_breakdown": [
       {
         "rubric": "cause_correctness",
         "weight": 0.4,
-        "mean_raw_score": 1.0,
-        "mean_weighted_score": 0.4
+        "mean_raw_score": 0.9,
+        "mean_weighted_score": 0.36
       },
       {
         "rubric": "chain_accuracy",
         "weight": 0.25,
-        "mean_raw_score": 0.0,
-        "mean_weighted_score": 0.0
+        "mean_raw_score": 1.0,
+        "mean_weighted_score": 0.25
       },
       {
         "rubric": "efficiency",
         "weight": 0.15,
-        "mean_raw_score": 0.975,
-        "mean_weighted_score": 0.1462
+        "mean_raw_score": 0.955,
+        "mean_weighted_score": 0.1432
       },
       {
         "rubric": "investigation_quality",
         "weight": 0.1,
-        "mean_raw_score": 0.1,
-        "mean_weighted_score": 0.01
+        "mean_raw_score": 0.216,
+        "mean_weighted_score": 0.0216
       },
       {
         "rubric": "anti_gaming",
         "weight": 0.1,
-        "mean_raw_score": 1.0,
-        "mean_weighted_score": 0.1
+        "mean_raw_score": 0.96,
+        "mean_weighted_score": 0.096
       }
-    ]
+    ],
+    "seeds": [
+      42,
+      7,
+      123
+    ],
+    "per_seed_lift": [
+      0.347,
+      0.382,
+      0.172
+    ],
+    "best_lift": 0.382,
+    "median_lift": 0.347,
+    "total_elapsed_s": 0.6
   },
   {
     "task_id": "task2_cascade_chain",
-    "seed": 42,
-    "elapsed_s": 0.2,
+    "seed": 7,
+    "elapsed_s": 0.3,
     "episode": 500,
-    "rolling_mean": 0.6596,
-    "baseline": 0.2521,
-    "lift": 0.4076,
+    "rolling_mean": 0.5005,
+    "baseline": 0.5021,
+    "lift": -0.0015,
     "rubric_breakdown": [
       {
         "rubric": "cause_correctness",
         "weight": 0.4,
-        "mean_raw_score": 1.0,
-        "mean_weighted_score": 0.4
-      },
-      {
-        "rubric": "chain_accuracy",
-        "weight": 0.25,
         "mean_raw_score": 0.0,
         "mean_weighted_score": 0.0
       },
       {
+        "rubric": "chain_accuracy",
+        "weight": 0.25,
+        "mean_raw_score": 1.0,
+        "mean_weighted_score": 0.25
+      },
+      {
         "rubric": "efficiency",
         "weight": 0.15,
-        "mean_raw_score": 0.9827,
-        "mean_weighted_score": 0.1474
+        "mean_raw_score": 0.9467,
+        "mean_weighted_score": 0.142
       },
       {
         "rubric": "investigation_quality",
         "weight": 0.1,
-        "mean_raw_score": 0.1323,
-        "mean_weighted_score": 0.0132
+        "mean_raw_score": 0.2904,
+        "mean_weighted_score": 0.029
       },
       {
         "rubric": "anti_gaming",
         "weight": 0.1,
-        "mean_raw_score": 0.99,
-        "mean_weighted_score": 0.099
+        "mean_raw_score": 0.795,
+        "mean_weighted_score": 0.0795
       }
-    ]
+    ],
+    "seeds": [
+      42,
+      7,
+      123
+    ],
+    "per_seed_lift": [
+      0.406,
+      -0.002,
+      -0.127
+    ],
+    "best_lift": 0.406,
+    "median_lift": -0.002,
+    "total_elapsed_s": 0.9
   },
   {
     "task_id": "task3_correlated_cause",
     "seed": 42,
-    "elapsed_s": 0.2,
+    "elapsed_s": 0.3,
     "episode": 500,
-    "rolling_mean": 0.6588,
-    "baseline": 0.2563,
-    "lift": 0.4025,
+    "rolling_mean": 0.5856,
+    "baseline": 0.5063,
+    "lift": 0.0793,
     "rubric_breakdown": [
       {
         "rubric": "cause_correctness",
         "weight": 0.4,
-        "mean_raw_score": 1.0,
-        "mean_weighted_score": 0.4
+        "mean_raw_score": 0.2,
+        "mean_weighted_score": 0.08
       },
       {
         "rubric": "chain_accuracy",
         "weight": 0.25,
-        "mean_raw_score": 0.0,
-        "mean_weighted_score": 0.0
+        "mean_raw_score": 1.0,
+        "mean_weighted_score": 0.25
       },
       {
         "rubric": "efficiency",
         "weight": 0.15,
-        "mean_raw_score": 0.9917,
-        "mean_weighted_score": 0.1488
+        "mean_raw_score": 0.9767,
+        "mean_weighted_score": 0.1465
       },
       {
         "rubric": "investigation_quality",
         "weight": 0.1,
-        "mean_raw_score": 0.1,
-        "mean_weighted_score": 0.01
+        "mean_raw_score": 0.218,
+        "mean_weighted_score": 0.0218
       },
       {
         "rubric": "anti_gaming",
         "weight": 0.1,
-        "mean_raw_score": 1.0,
-        "mean_weighted_score": 0.1
+        "mean_raw_score": 0.8725,
+        "mean_weighted_score": 0.0873
       }
-    ]
+    ],
+    "seeds": [
+      42,
+      7,
+      123
+    ],
+    "per_seed_lift": [
+      0.079,
+      -0.06,
+      0.403
+    ],
+    "best_lift": 0.403,
+    "median_lift": 0.079,
+    "total_elapsed_s": 0.8
   },
   {
     "task_id": "task4_multi_region_failover",
-    "seed": 42,
+    "seed": 7,
     "elapsed_s": 0.2,
     "episode": 500,
-    "rolling_mean": 0.6592,
-    "baseline": 0.2935,
-    "lift": 0.3658,
+    "rolling_mean": 0.7095,
+    "baseline": 0.5435,
+    "lift": 0.166,
     "rubric_breakdown": [
       {
         "rubric": "cause_correctness",
         "weight": 0.4,
-        "mean_raw_score": 1.0,
-        "mean_weighted_score": 0.4
+        "mean_raw_score": 0.5,
+        "mean_weighted_score": 0.2
       },
       {
         "rubric": "chain_accuracy",
         "weight": 0.25,
-        "mean_raw_score": 0.0,
-        "mean_weighted_score": 0.0
+        "mean_raw_score": 1.0,
+        "mean_weighted_score": 0.25
       },
       {
         "rubric": "efficiency",
         "weight": 0.15,
-        "mean_raw_score": 0.9913,
-        "mean_weighted_score": 0.1487
+        "mean_raw_score": 0.9842,
+        "mean_weighted_score": 0.1477
       },
       {
         "rubric": "investigation_quality",
         "weight": 0.1,
-        "mean_raw_score": 0.105,
-        "mean_weighted_score": 0.0105
+        "mean_raw_score": 0.1882,
+        "mean_weighted_score": 0.0188
       },
       {
         "rubric": "anti_gaming",
         "weight": 0.1,
-        "mean_raw_score": 1.0,
-        "mean_weighted_score": 0.1
+        "mean_raw_score": 0.93,
+        "mean_weighted_score": 0.093
       }
-    ]
+    ],
+    "seeds": [
+      42,
+      7,
+      123
+    ],
+    "per_seed_lift": [
+      0.039,
+      0.166,
+      0.365
+    ],
+    "best_lift": 0.365,
+    "median_lift": 0.166,
+    "total_elapsed_s": 0.6
   },
   {
     "task_id": "task5_data_corruption_cascade",
-    "seed": 42,
-    "elapsed_s": 0.1,
+    "seed": 123,
+    "elapsed_s": 0.2,
     "episode": 500,
-    "rolling_mean": 0.638,
-    "baseline": 0.2864,
-    "lift": 0.3516,
+    "rolling_mean": 0.7439,
+    "baseline": 0.5364,
+    "lift": 0.2075,
     "rubric_breakdown": [
       {
         "rubric": "cause_correctness",
         "weight": 0.4,
-        "mean_raw_score": 0.95,
-        "mean_weighted_score": 0.38
+        "mean_raw_score": 0.6,
+        "mean_weighted_score": 0.24
       },
       {
         "rubric": "chain_accuracy",
         "weight": 0.25,
-        "mean_raw_score": 0.0,
-        "mean_weighted_score": 0.0
+        "mean_raw_score": 1.0,
+        "mean_weighted_score": 0.25
       },
       {
         "rubric": "efficiency",
         "weight": 0.15,
-        "mean_raw_score": 0.9867,
-        "mean_weighted_score": 0.148
+        "mean_raw_score": 0.9733,
+        "mean_weighted_score": 0.146
       },
       {
         "rubric": "investigation_quality",
         "weight": 0.1,
-        "mean_raw_score": 0.1,
-        "mean_weighted_score": 0.01
+        "mean_raw_score": 0.1888,
+        "mean_weighted_score": 0.0189
       },
       {
         "rubric": "anti_gaming",
         "weight": 0.1,
-        "mean_raw_score": 1.0,
-        "mean_weighted_score": 0.1
+        "mean_raw_score": 0.89,
+        "mean_weighted_score": 0.089
       }
-    ]
+    ],
+    "seeds": [
+      42,
+      7,
+      123
+    ],
+    "per_seed_lift": [
+      0.233,
+      -0.036,
+      0.207
+    ],
+    "best_lift": 0.233,
+    "median_lift": 0.207,
+    "total_elapsed_s": 0.6
   }
 ]

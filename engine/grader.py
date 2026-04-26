@@ -88,9 +88,9 @@ class Grader:
         not considered "correct" here — that case is awarded 0.5 partial
         credit by :func:`compute_final_score` via its ``partial_credit``
         branch. Keeping ``check_cause_match`` strict makes that branch
-        reachable; previously it returned ``True`` for any contributing
-        cause, which silently turned the partial-credit logic into dead
-        code (see analysis_results (2).md C5).
+        reachable; an earlier version returned ``True`` for any
+        contributing cause, which silently turned the partial-credit
+        logic into dead code.
         """
         if not submitted_cause or not ground_truth_cause:
             return False

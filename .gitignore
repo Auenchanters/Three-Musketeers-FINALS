@@ -21,3 +21,16 @@ training_data/runs/
 data/generated/
 sft_output/
 grpo_output/
+
+# Local-only scratch / working notes that aren't part of the env
+Keep in mind.md
+archive/
+.kilo/
+.vscode/
+
+# Stray ops/log dumps — never re-introduce these at top level
+*_logs.txt
+*_log.txt
+analysis_results*.md
+PROJECT_REVIEW.md
+active_jobs.txt

@@ -81,9 +81,8 @@ class TestCauseMatch:
         ) is True
 
     def test_correlated_contributing_cause_is_not_full_match(self):
-        # Naming a single contributing cause is NOT a full match anymore —
+        # Naming a single contributing cause is NOT a full match —
         # it routes to the partial-credit branch in compute_final_score.
-        # See analysis_results (2).md C5 for the original bug.
         assert Grader.check_cause_match(
             "commit-abc",
             "commit-abc+infra-xyz",

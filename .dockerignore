@@ -2,8 +2,27 @@ __pycache__/
 *.py[cod]
 *.egg-info/
 .git
+.github
 .gitignore
+.gitattributes
 .env
 .venv
 .pytest_cache
 .mypy_cache
+.claude
+.kilo
+.vscode
+archive
+tests
+Keep in mind.md
+*_logs.txt
+*_log.txt
+analysis_results*.md
+PROJECT_REVIEW.md
+active_jobs.txt
+hf_jobs
+sft_output
+grpo_output
+training_data/runs
+training_data/curriculum_state.json
+data/generated
