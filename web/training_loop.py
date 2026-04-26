@@ -377,15 +377,13 @@ _PER_SERVICE_SLOTS = 8
 # the first time a session runs, which is actually the safest failure mode.
 FEATURE_DIM = (
     1                          # bias
-    + 1                        # normalized step
-    + 4                        # one-hot phase bucket
     + 3                        # facts / hypotheses / wrong-hypotheses (normalized)
     + 9                        # bag-of-action-type counts (one per ActionType)
     + 4                        # has-evidence flags (any trace / commit / config / infra)
     + _PER_SERVICE_SLOTS       # per-service "have I queried this" flags
     + 1                        # "other services queried" count (the tail)
 )
-assert FEATURE_DIM == 31, f"FEATURE_DIM accounting drift: {FEATURE_DIM}"
+assert FEATURE_DIM == 26, f"FEATURE_DIM accounting drift: {FEATURE_DIM}"
 
 
 # All 9 action-type values, fixed order, used to compute the bag-of-actions
@@ -431,17 +429,9 @@ def _featurize(
     f[i] = 1.0; i += 1                                                # bias
 
     step = max(0, getattr(env, "_steps_taken", 0))
-    f[i] = min(1.0, step / max(1, max_episode_steps)); i += 1         # norm step
+    # step norm removed
 
-    if step <= 2:
-        phase = 0
-    elif step <= 5:
-        phase = 1
-    elif step <= 9:
-        phase = 2
-    else:
-        phase = 3
-    f[i + phase] = 1.0; i += 4                                        # phase one-hot
+# phase removed
 
     n_facts = len(getattr(env, "_known_facts", []))
     n_hyp = len(getattr(env, "_hypotheses_submitted", []))
@@ -728,8 +718,8 @@ class LearningSession:
     # Adaptive boosting: if the rolling mean stagnates (within ±0.01) for
     # 50 consecutive episodes, policy_lr and entropy_coef are bumped once
     # per plateau to break out of local optima.
-    policy_lr: float = 0.50
-    value_lr: float = 0.10
+    policy_lr: float = 4.0
+    value_lr: float = 1.0
     entropy_coef: float = 0.005
     status: str = "starting"
     started_at: float = field(default_factory=time.time)
