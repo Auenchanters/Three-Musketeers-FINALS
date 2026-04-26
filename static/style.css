@@ -1813,3 +1813,18 @@ kbd {
 .muted { color: var(--ink-muted); }
 
 .hidden { display: none !important; }
+
+.outage-dot {
+  fill: var(--error);
+  opacity: 0;
+  transition: opacity 200ms;
+}
+.svc-group.root-cause .outage-dot {
+  opacity: 1;
+  animation: pulse-dot 1.5s infinite;
+}
+@keyframes pulse-dot {
+  0%   { transform: scale(0.95); opacity: 0.8; }
+  50%  { transform: scale(1.3); opacity: 1; }
+  100% { transform: scale(0.95); opacity: 0.8; }
+}
