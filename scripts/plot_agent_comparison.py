@@ -28,10 +28,12 @@ Z_95 = 1.96
 
 DATA_DIR = Path("training_data")
 AGENT_CONFIG = {
-    "random":  {"label": "Random baseline",  "color": "#e07070", "linestyle": "--", "zorder": 1},
-    "trained": {"label": "Trained (SFT/GRPO)", "color": "#5cad7a", "linestyle": "-",  "zorder": 3},
-    "oracle":  {"label": "Oracle upper bound", "color": "#4a86b8", "linestyle": "-",  "zorder": 2},
+    "random":    {"label": "Random baseline",    "color": "#e07070", "linestyle": "--", "zorder": 1},
+    "heuristic": {"label": "Heuristic (rules)",  "color": "#d4a030", "linestyle": "-.", "zorder": 2},
+    "trained":   {"label": "Trained (SFT/GRPO)", "color": "#5cad7a", "linestyle": "-",  "zorder": 3},
+    "oracle":    {"label": "Oracle upper bound", "color": "#4a86b8", "linestyle": "-",  "zorder": 4},
 }
+AGENT_ORDER = ["random", "heuristic", "trained", "oracle"]
 
 
 def load_results() -> dict:
@@ -106,7 +108,7 @@ def cumulative_avg(episodes: list) -> list:
 
 
 def plot_main(results: dict):
-    present = [n for n in ["random", "trained", "oracle"] if results.get(n)]
+    present = [n for n in AGENT_ORDER if results.get(n)]
     n_per_diff = n_seeds_per_difficulty(results)
     fig, axes = plt.subplots(1, 3, figsize=(18, 5))
     fig.suptitle(
@@ -204,7 +206,7 @@ def plot_main(results: dict):
 
 def plot_comparison(results: dict):
     """Single-panel score comparison — used in the README. Renders 95% CI bars."""
-    present = [n for n in ["random", "trained", "oracle"] if results.get(n)]
+    present = [n for n in AGENT_ORDER if results.get(n)]
     means = [mean_score(results[n]) for n in present]
     cis = [ci95(results[n]) for n in present]
     labels = [AGENT_CONFIG[n]["label"] for n in present]

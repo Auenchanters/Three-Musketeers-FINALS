@@ -60,7 +60,7 @@ def _format_obs_compact(obs_dict):
 # =====================================================================
 
 
-def collect_demonstrations(n_seeds=20, output_path="training_data"):
+def collect_demonstrations(n_seeds=50, output_path="training_data"):
     """Collect oracle demonstrations by running optimal solutions."""
     from engine.environment import PostmortemEnvironment
     from models.action import Action
@@ -71,6 +71,7 @@ def collect_demonstrations(n_seeds=20, output_path="training_data"):
     rewards_log = []
 
     print("Collecting %d oracle demonstrations (3 difficulties x %d seeds)..." % (n_seeds * 3, n_seeds))
+    print("  (More demos = better chain_accuracy learning. 50+ seeds recommended.)")
 
     for difficulty in ["easy", "medium", "hard"]:
         for i in range(n_seeds):
@@ -170,16 +171,18 @@ def collect_demonstrations(n_seeds=20, output_path="training_data"):
 # =====================================================================
 
 DEFAULT_SFT_MODEL = "Qwen/Qwen2.5-1.5B-Instruct"
+DEFAULT_SFT_EPOCHS = 5
+DEFAULT_MAX_SEQ_LENGTH = 4096
 
 
 def run_sft(
     model_name=DEFAULT_SFT_MODEL,
     demos_path="training_data/oracle_demos.jsonl",
     output_dir="sft_output",
-    epochs=3,
+    epochs=DEFAULT_SFT_EPOCHS,
     batch_size=2,
     lr=2e-5,
-    max_seq_length=2048,
+    max_seq_length=DEFAULT_MAX_SEQ_LENGTH,
 ):
     """Run SFT on oracle demonstrations using TRL SFTTrainer with LoRA."""
     print("Starting SFT training on %s..." % model_name)
@@ -515,7 +518,7 @@ def run_grpo(
 # =====================================================================
 
 def evaluate_agents(n_seeds=30):
-    """Compare random agent, oracle agent, and show the reward gap.
+    """Compare random, heuristic, and oracle agents and show the reward gap.
 
     Default ``n_seeds=30`` per difficulty (90 episodes per agent total)
     drops the standard error of the mean from ~0.05 (n=10) to ~0.03 — small
@@ -526,7 +529,7 @@ def evaluate_agents(n_seeds=30):
     from data.seed_generator import generate_scenario, generate_oracle_solution
 
     env = PostmortemEnvironment()
-    results = {"random": [], "oracle": []}
+    results = {"random": [], "heuristic": [], "oracle": []}
 
     print("Evaluating agents on %d seeds per difficulty..." % n_seeds)
 
@@ -589,10 +592,15 @@ def evaluate_agents(n_seeds=30):
                     pass
 
             random_score = env.state.final_score or 0.01
+            random_rubrics = env.get_final_rubric_breakdown() or []
             results["random"].append({
                 "difficulty": difficulty, "score": random_score,
                 "rewards": random_rewards, "n_steps": len(random_rewards),
+                "rubrics": random_rubrics,
             })
+
+            # --- Heuristic Agent ---
+            _run_heuristic_agent(env, scenario, results)
 
             # --- Oracle Agent ---
             _reset_with_scenario(env, scenario)
@@ -621,9 +629,11 @@ def evaluate_agents(n_seeds=30):
                     break
 
             oracle_score = env.state.final_score or 0.01
+            oracle_rubrics = env.get_final_rubric_breakdown() or []
             results["oracle"].append({
                 "difficulty": difficulty, "score": oracle_score,
                 "rewards": oracle_rewards, "n_steps": len(oracle_rewards),
+                "rubrics": oracle_rubrics,
             })
 
     # Save results
@@ -637,7 +647,7 @@ def evaluate_agents(n_seeds=30):
     print("EVALUATION RESULTS")
     print("=" * 60)
 
-    for agent_name in ["random", "oracle"]:
+    for agent_name in ["random", "heuristic", "oracle"]:
         agent_results = results[agent_name]
         scores = [r["score"] for r in agent_results]
         print("\n  %s Agent:" % agent_name.upper())
@@ -648,15 +658,141 @@ def evaluate_agents(n_seeds=30):
             if ds:
                 print("    %-8s: mean=%.3f  (n=%d)" % (diff, sum(ds) / len(ds), len(ds)))
 
-    # Compute reward gap
+    # Compute reward gaps
     random_mean = sum(r["score"] for r in results["random"]) / len(results["random"])
+    heuristic_mean = sum(r["score"] for r in results["heuristic"]) / len(results["heuristic"])
     oracle_mean = sum(r["score"] for r in results["oracle"]) / len(results["oracle"])
-    gap = oracle_mean - random_mean
-    print("\n  REWARD GAP: %.3f (oracle %.3f - random %.3f)" % (gap, oracle_mean, random_mean))
-    print("  This %.1f%% gap demonstrates the environment can train meaningful behavior." % (gap * 100))
+    print("\n  REWARD GAPS:")
+    print("    Heuristic over Random:  +%.3f (%.3f vs %.3f)" % (heuristic_mean - random_mean, heuristic_mean, random_mean))
+    print("    Oracle over Heuristic:  +%.3f (%.3f vs %.3f)" % (oracle_mean - heuristic_mean, oracle_mean, heuristic_mean))
+    print("    Oracle over Random:     +%.3f (%.3f vs %.3f)" % (oracle_mean - random_mean, oracle_mean, random_mean))
+    print("  These gaps demonstrate the environment can train meaningful behavior.")
     print("=" * 60)
 
     return results
+
+
+def _run_heuristic_agent(env, scenario, results):
+    """Run a rule-based heuristic agent that follows a sensible investigation
+    strategy without any LLM or training.
+
+    Strategy:
+    1. Find the service with highest error rate
+    2. Query its logs for 'error'
+    3. Diff the most recent commit deployed to that service
+    4. If there are traces during incident, fetch one
+    5. Hypothesize using the commit from that service
+    6. Build a plausible chain from the service graph
+    7. Submit
+
+    This creates a meaningful middle point between Random and Oracle, showing
+    that even a simple strategy significantly outperforms random when the
+    environment's reward signal is well-designed.
+    """
+    from models.action import Action, ActionType
+
+    difficulty = scenario["task_difficulty"]
+    _reset_with_scenario(env, scenario)
+    heuristic_rewards = []
+
+    # Find the target service (highest error rate)
+    service_data = scenario.get("services", [])
+    target_service = None
+    max_err = -1
+    for s in service_data:
+        err = float(s.get("error_rate_during_incident") or 0)
+        if err > max_err:
+            max_err = err
+            target_service = s["name"]
+
+    if not target_service:
+        target_service = list(scenario["service_graph"].keys())[0]
+
+    # Step 1: query_logs on target service for "error"
+    try:
+        obs = env.step(Action(action_type=ActionType.QUERY_LOGS, service=target_service, keyword="error"))
+        heuristic_rewards.append(obs.reward)
+    except Exception:
+        pass
+
+    # Step 2: query_logs for "deploy" on target
+    if not env._done:
+        try:
+            obs = env.step(Action(action_type=ActionType.QUERY_LOGS, service=target_service, keyword="deploy"))
+            heuristic_rewards.append(obs.reward)
+        except Exception:
+            pass
+
+    # Step 3: diff the most suspicious commit (latest from target service)
+    best_commit = None
+    for c in scenario.get("commits", []):
+        if c["service"] == target_service:
+            best_commit = c["hash"]
+    if not best_commit and scenario.get("commits"):
+        best_commit = scenario["commits"][-1]["hash"]
+
+    if best_commit and not env._done:
+        try:
+            obs = env.step(Action(action_type=ActionType.DIFF_COMMIT, commit_hash=best_commit))
+            heuristic_rewards.append(obs.reward)
+        except Exception:
+            pass
+
+    # Step 4: fetch a trace during incident
+    traces = scenario.get("traces", [])
+    if traces and not env._done:
+        # prefer traces from the second half (more likely to show errors)
+        mid = len(traces) // 2
+        trace_id = traces[min(mid, len(traces)-1)]["trace_id"]
+        try:
+            obs = env.step(Action(action_type=ActionType.FETCH_TRACE, trace_id=trace_id))
+            heuristic_rewards.append(obs.reward)
+        except Exception:
+            pass
+
+    # Step 5: hypothesize using the best commit
+    if best_commit and not env._done:
+        try:
+            obs = env.step(Action(action_type=ActionType.HYPOTHESIZE, cause_entity_id=best_commit))
+            heuristic_rewards.append(obs.reward)
+        except Exception:
+            pass
+
+    # Step 6: build a plausible chain from graph structure
+    graph = scenario.get("service_graph", {})
+    chain = [{"service": target_service, "effect": "error_spike"}]
+    # walk upstream in the graph
+    for svc, deps in graph.items():
+        if target_service in deps and svc != target_service:
+            chain.append({"service": svc, "effect": "cascading_failure"})
+            break
+
+    if not env._done:
+        try:
+            obs = env.step(Action(action_type=ActionType.EXPLAIN_CHAIN, chain=chain))
+            heuristic_rewards.append(obs.reward)
+        except Exception:
+            pass
+
+    # Step 7: submit
+    if not env._done:
+        try:
+            obs = env.step(Action(
+                action_type=ActionType.SUBMIT,
+                final_cause=best_commit or "unknown",
+                final_chain=chain,
+            ))
+            heuristic_rewards.append(obs.reward)
+        except Exception:
+            pass
+
+    heuristic_score = env.state.final_score or 0.01
+    heuristic_rubrics = env.get_final_rubric_breakdown() or []
+    results["heuristic"].append({
+        "difficulty": difficulty, "score": heuristic_score,
+        "rewards": heuristic_rewards, "n_steps": len(heuristic_rewards),
+        "rubrics": heuristic_rubrics,
+    })
 
 
 # =====================================================================
@@ -667,6 +803,11 @@ def evaluate_trained_model(model_name: str, n_seeds: int = 30) -> dict:
     """
     Run the trained LLM against the live environment and record per-episode scores.
     Returns a results dict compatible with the existing evaluation_results.json format.
+
+    Improvements over baseline evaluation:
+    - Retries generation up to 2x on parse failure (with temperature=0.3)
+    - Captures per-rubric breakdown for each episode
+    - Provides clearer diagnostic output
     """
     try:
         from transformers import AutoTokenizer, AutoModelForCausalLM
@@ -693,6 +834,10 @@ def evaluate_trained_model(model_name: str, n_seeds: int = 30) -> dict:
 
     env = PostmortemEnvironment()
     results = {"trained": []}
+    parse_failures = 0
+    total_steps = 0
+
+    print("Evaluating trained model on %d seeds per difficulty..." % n_seeds)
 
     for difficulty in ["easy", "medium", "hard"]:
         for i in range(n_seeds):
@@ -701,47 +846,76 @@ def evaluate_trained_model(model_name: str, n_seeds: int = 30) -> dict:
             obs_dict = _reset_with_scenario(env, scenario)
             episode_rewards = []
 
-            for _ in range(scenario.get("max_steps", 40)):
+            for step_idx in range(scenario.get("max_steps", 40)):
                 obs_text = _format_obs_compact(obs_dict)
                 prompt = build_chat_prompt(tokenizer, obs_text)
 
-                inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
-                with __import__("torch").no_grad():
-                    output_ids = model.generate(
-                        **inputs,
-                        max_new_tokens=128,
-                        do_sample=False,
-                        pad_token_id=tokenizer.eos_token_id,
+                # Try greedy first, then retry with temperature on parse failure
+                action_dict = None
+                for attempt, (do_sample, temp) in enumerate([
+                    (False, 1.0), (True, 0.3), (True, 0.5),
+                ]):
+                    inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
+                    with __import__("torch").no_grad():
+                        gen_kwargs = {
+                            "max_new_tokens": 192,
+                            "pad_token_id": tokenizer.eos_token_id,
+                        }
+                        if do_sample:
+                            gen_kwargs["do_sample"] = True
+                            gen_kwargs["temperature"] = temp
+                        else:
+                            gen_kwargs["do_sample"] = False
+                        output_ids = model.generate(**inputs, **gen_kwargs)
+                    text = tokenizer.decode(
+                        output_ids[0][inputs["input_ids"].shape[1]:],
+                        skip_special_tokens=True,
                     )
-                text = tokenizer.decode(
-                    output_ids[0][inputs["input_ids"].shape[1]:], skip_special_tokens=True
-                )
+                    candidate = parse_action_json(text, fallback=None)
+                    if candidate and candidate.get("action_type"):
+                        action_dict = candidate
+                        break
+
+                if action_dict is None:
+                    parse_failures += 1
+                    action_dict = {"action_type": "submit", "final_cause": "unknown",
+                                   "final_chain": [{"service": "data", "effect": "unknown"}]}
 
                 try:
-                    action_dict = parse_action_json(text, fallback={"action_type": "submit"})
                     action = action_from_dict(action_dict)
                     obs = env.step(action)
                     episode_rewards.append(obs.reward)
                     obs_dict = obs.model_dump()
+                    total_steps += 1
                     if obs.done:
                         break
                 except Exception:
-                    # Force submit on bad parse
-                    obs = env.step(Action(
-                        action_type=ActionType.SUBMIT,
-                        final_cause="unknown",
-                        final_chain=[{"service": "data", "effect": "unknown"}],
-                    ))
-                    episode_rewards.append(obs.reward)
+                    # Force submit on action construction error
+                    try:
+                        obs = env.step(Action(
+                            action_type=ActionType.SUBMIT,
+                            final_cause="unknown",
+                            final_chain=[{"service": "data", "effect": "unknown"}],
+                        ))
+                        episode_rewards.append(obs.reward)
+                    except Exception:
+                        pass
                     break
 
             score = env.state.final_score or 0.01
+            rubrics = env.get_final_rubric_breakdown() or []
             results["trained"].append({
                 "difficulty": difficulty,
                 "score": score,
                 "rewards": episode_rewards,
                 "n_steps": len(episode_rewards),
+                "rubrics": rubrics,
             })
+
+            if (i + 1) % 10 == 0:
+                recent = results["trained"][-10:]
+                avg = sum(r["score"] for r in recent) / len(recent)
+                print("  %s: %d/%d done (recent avg: %.3f)" % (difficulty, i + 1, n_seeds, avg))
 
     # Merge into existing evaluation_results.json
     out_dir = Path("training_data")
@@ -758,11 +932,19 @@ def evaluate_trained_model(model_name: str, n_seeds: int = 30) -> dict:
 
     scores = [r["score"] for r in results["trained"]]
     trained_mean = sum(scores) / len(scores)
-    print("Trained model mean score: %.3f" % trained_mean)
+    print("\nTrained model evaluation complete:")
+    print("  Mean score: %.3f" % trained_mean)
+    print("  Parse failures: %d / %d steps (%.1f%%)" % (
+        parse_failures, max(1, total_steps), 100.0 * parse_failures / max(1, total_steps)))
+
+    # Per-rubric averages (if captured)
+    rubric_avgs = _compute_rubric_averages(results["trained"])
+    if rubric_avgs:
+        print("  Per-rubric averages:")
+        for name, avg in rubric_avgs.items():
+            print("    %-25s: %.3f" % (name, avg))
 
     # Sanity check: did training actually move the policy off random?
-    # Re-read the merged file so we have a single source of truth, no matter
-    # whether evaluation_results.json existed before this call or not.
     merged = {}
     if eval_path.exists():
         with open(eval_path) as f:
@@ -770,6 +952,7 @@ def evaluate_trained_model(model_name: str, n_seeds: int = 30) -> dict:
 
     random_eps = merged.get("random") or []
     oracle_eps = merged.get("oracle") or []
+    heuristic_eps = merged.get("heuristic") or []
     if random_eps:
         random_mean = sum(r["score"] for r in random_eps) / len(random_eps)
         delta = trained_mean - random_mean
@@ -791,13 +974,28 @@ def evaluate_trained_model(model_name: str, n_seeds: int = 30) -> dict:
                 sum(r["score"] for r in oracle_eps) / len(oracle_eps)
                 if oracle_eps else 0.0
             )
+            heuristic_mean = (
+                sum(r["score"] for r in heuristic_eps) / len(heuristic_eps)
+                if heuristic_eps else 0.0
+            )
             remaining = oracle_mean - trained_mean
             print(
-                "OK: trained beats random by %+.3f"
-                "  (random=%.3f, trained=%.3f, oracle=%.3f, remaining gap=%.3f)" % (
-                    delta, random_mean, trained_mean, oracle_mean, remaining,
-                )
+                "\nOK: trained beats random by %+.3f" % delta
             )
+            if heuristic_mean > 0:
+                print(
+                    "  random=%.3f → heuristic=%.3f → trained=%.3f → oracle=%.3f"
+                    "  (remaining gap=%.3f)" % (
+                        random_mean, heuristic_mean, trained_mean, oracle_mean, remaining,
+                    )
+                )
+            else:
+                print(
+                    "  random=%.3f → trained=%.3f → oracle=%.3f"
+                    "  (remaining gap=%.3f)" % (
+                        random_mean, trained_mean, oracle_mean, remaining,
+                    )
+                )
     return results
 
 
@@ -1080,6 +1278,20 @@ def _mean_score(agent_results: list) -> float:
     return sum(scores) / len(scores)
 
 
+def _compute_rubric_averages(episodes: list) -> dict:
+    """Compute mean raw_score per rubric across episodes that have breakdown."""
+    rubric_sums: Dict[str, float] = {}
+    rubric_counts: Dict[str, int] = {}
+    for ep in episodes:
+        for r in ep.get("rubrics", []):
+            name = r.get("rubric", "")
+            if name:
+                rubric_sums[name] = rubric_sums.get(name, 0.0) + float(r.get("raw_score", 0.0))
+                rubric_counts[name] = rubric_counts.get(name, 0) + 1
+    return {name: rubric_sums[name] / rubric_counts[name]
+            for name in rubric_sums if rubric_counts.get(name, 0) > 0}
+
+
 def _max_seeds_per_difficulty(results: dict) -> int:
     """Largest per-difficulty episode count seen across all evaluated agents.
 
@@ -1146,9 +1358,9 @@ def _average_rewards(agent_results):
 
 def run_full_pipeline(
     base_model: str = DEFAULT_SFT_MODEL,
-    collect_seeds: int = 20,
+    collect_seeds: int = 50,
     eval_seeds: int = 30,
-    epochs: int = 3,
+    epochs: int = DEFAULT_SFT_EPOCHS,
     sft_output: str = "sft_output",
 ):
     """End-to-end one-shot pipeline.
@@ -1232,7 +1444,7 @@ def main():
 
     # Collect
     p_collect = sub.add_parser("collect", help="Collect oracle demonstrations")
-    p_collect.add_argument("--n-seeds", type=int, default=20, help="Seeds per difficulty")
+    p_collect.add_argument("--n-seeds", type=int, default=50, help="Seeds per difficulty (50+ recommended)")
     p_collect.add_argument("--output", default="training_data", help="Output directory")
 
     # SFT
@@ -1240,7 +1452,7 @@ def main():
     p_sft.add_argument("--model", default=DEFAULT_SFT_MODEL)
     p_sft.add_argument("--demos", default="training_data/oracle_demos.jsonl")
     p_sft.add_argument("--output", default="sft_output")
-    p_sft.add_argument("--epochs", type=int, default=3)
+    p_sft.add_argument("--epochs", type=int, default=DEFAULT_SFT_EPOCHS)
 
     # GRPO
     p_grpo = sub.add_parser("grpo", help="Run GRPO training")
@@ -1275,11 +1487,11 @@ def main():
     )
     p_full.add_argument("--model", default=DEFAULT_SFT_MODEL,
                         help="Base model for SFT (default: %s)" % DEFAULT_SFT_MODEL)
-    p_full.add_argument("--collect-seeds", type=int, default=20,
-                        help="Seeds per difficulty for oracle demo collection")
+    p_full.add_argument("--collect-seeds", type=int, default=50,
+                        help="Seeds per difficulty for oracle demo collection (50+ for chain_accuracy)")
     p_full.add_argument("--eval-seeds", type=int, default=30,
                         help="Seeds per difficulty for evaluation (default 30 — 95%% CI ≈ ±0.03)")
-    p_full.add_argument("--epochs", type=int, default=3, help="SFT epochs")
+    p_full.add_argument("--epochs", type=int, default=DEFAULT_SFT_EPOCHS, help="SFT epochs")
     p_full.add_argument("--sft-output", default="sft_output", help="Where to save the LoRA adapter")
 
     args = parser.parse_args()
@@ -1314,7 +1526,7 @@ def main():
         print("  python train.py full")
         print()
         print("Step by step:")
-        print("  python train.py collect --n-seeds 20")
+        print("  python train.py collect --n-seeds 50")
         print("  python train.py evaluate --n-seeds 30")
         print("  python train.py sft           # default: %s" % DEFAULT_SFT_MODEL)
         print("  python train.py evaluate --n-seeds 30 --model ./sft_output")

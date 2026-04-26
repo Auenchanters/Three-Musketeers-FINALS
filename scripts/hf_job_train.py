@@ -19,12 +19,12 @@ BRANCH                git branch (default: main)
 BASE_MODEL            HF model id for SFT base (default: Qwen/Qwen2.5-7B-Instruct).
                       Any chat-tuned causal LM works; use full HF id like
                       ``meta-llama/Llama-3.1-8B-Instruct`` etc.
-EPOCHS                SFT epochs (default: 6 in FULL, 1 in SMOKE)
-MAX_SEQ               max seq length for SFT (default: 1536)
+EPOCHS                SFT epochs (default: 5 in FULL, 1 in SMOKE)
+MAX_SEQ               max seq length for SFT (default: 4096)
 COLLECT_SEEDS         demos per difficulty (default: 20 FULL / 2 SMOKE)
 EVAL_SEEDS            eval episodes per difficulty (default: 4 FULL / 2 SMOKE)
-EVAL_MAX_NEW_TOKENS   tokens generated per LM call during eval (default: 80)
-EVAL_MAX_STEPS        cap on env steps per eval episode (default: 20)
+EVAL_MAX_NEW_TOKENS   tokens generated per LM call during eval (default: 192)
+EVAL_MAX_STEPS        cap on env steps per eval episode (default: 30)
 EVAL_BASE_TOO         "1" -> also evaluate the bare BASE before LoRA (delta study).
 EVAL_ONLY             "1" -> skip SFT, just benchmark BASE_MODEL (+optional
                       ADAPTER_REPO). Lets you plug in any externally-trained
@@ -369,12 +369,12 @@ def main() -> int:
     UPLOAD_REPO = os.environ.get("UPLOAD_REPO", "").strip()
     DO_GRPO = os.environ.get("GRPO", "0") == "1"
     BASE_MODEL = os.environ.get("BASE_MODEL", "Qwen/Qwen2.5-7B-Instruct").strip()
-    MAX_SEQ = int(os.environ.get("MAX_SEQ", "1536"))
+    MAX_SEQ = int(os.environ.get("MAX_SEQ", "4096"))
     EPOCHS_OVERRIDE = os.environ.get("EPOCHS", "").strip()
     COLLECT_OVERRIDE = os.environ.get("COLLECT_SEEDS", "").strip()
     EVAL_OVERRIDE = os.environ.get("EVAL_SEEDS", "").strip()
-    EVAL_MAX_NEW_TOK = int(os.environ.get("EVAL_MAX_NEW_TOKENS", "80"))
-    EVAL_MAX_STEPS = int(os.environ.get("EVAL_MAX_STEPS", "20"))
+    EVAL_MAX_NEW_TOK = int(os.environ.get("EVAL_MAX_NEW_TOKENS", "192"))
+    EVAL_MAX_STEPS = int(os.environ.get("EVAL_MAX_STEPS", "30"))
     EVAL_BASE_TOO = os.environ.get("EVAL_BASE_TOO", "0") == "1"
     # EVAL_ONLY mode: skip SFT, just download an external adapter (any RL/SFT/
     # DPO/GRPO trained PEFT) from ADAPTER_REPO and benchmark it against the
@@ -562,7 +562,7 @@ def main() -> int:
     if SMOKE:
         collect_seeds, eval_seeds, epochs = 2, 2, 1
     else:
-        collect_seeds, eval_seeds, epochs = 20, 4, 6  # 4 seeds * 3 diff = 12 ep eval (~3 min)
+        collect_seeds, eval_seeds, epochs = 50, 10, 5  # 10 seeds * 3 diff = 30 ep eval
 
     if COLLECT_OVERRIDE:
         collect_seeds = int(COLLECT_OVERRIDE)
