@@ -1128,7 +1128,7 @@ async function startTraining() {
     );
     return;
   }
-  const nEpisodes = clamp(parseInt(epsInput?.value, 10) || 500, 50, 600);
+  const nEpisodes = clamp(parseInt(epsInput?.value, 10) || 500, 50, 1000);
   if (epsInput) epsInput.value = String(nEpisodes);
 
   // Tear down any previous run.
@@ -1393,7 +1393,7 @@ function paintTrainingChart(terminal = false) {
   }
 
   if (points.length) {
-    // Raw per-episode dots (low-opacity primary).
+    // Raw per-episode dots (low-opacity neon green).
     const rawG = document.createElementNS(SVG_NS, "g");
     rawG.classList.add("training-raw-points");
     for (const p of points) {
@@ -1424,6 +1424,33 @@ function paintTrainingChart(terminal = false) {
     line.setAttribute("points", linePts);
     svg.appendChild(line);
 
+    // --- Dip markers (red dots where rolling mean drops by ≥0.02) ---
+    const DIP_THRESHOLD = 0.02;
+    const dipG = document.createElementNS(SVG_NS, "g");
+    dipG.classList.add("training-dip-markers");
+    for (let i = 1; i < points.length; i++) {
+      const drop = points[i - 1].rolling_mean - points[i].rolling_mean;
+      if (drop >= DIP_THRESHOLD) {
+        const cx = xOf(points[i].episode);
+        const cy = yOf(points[i].rolling_mean);
+        const dc = document.createElementNS(SVG_NS, "circle");
+        dc.classList.add("training-dip-dot");
+        dc.setAttribute("cx", cx);
+        dc.setAttribute("cy", cy);
+        dc.setAttribute("r", 4);
+        dc.dataset.episode = String(points[i].episode);
+        dc.dataset.drop = drop.toFixed(3);
+        dc.dataset.score = points[i].score.toFixed(3);
+        dc.dataset.rolling = points[i].rolling_mean.toFixed(3);
+        // Attach rubric snapshot if available
+        if (points[i].rubric_snapshot) {
+          dc.dataset.rubrics = JSON.stringify(points[i].rubric_snapshot);
+        }
+        dipG.appendChild(dc);
+      }
+    }
+    svg.appendChild(dipG);
+
     // Current-position marker — small primary dot at the latest rolling mean.
     const dot = document.createElementNS(SVG_NS, "circle");
     dot.classList.add("training-current-marker");
@@ -1435,7 +1462,57 @@ function paintTrainingChart(terminal = false) {
 
   // Replace any prior svg in-place.
   Array.from(host.querySelectorAll("svg")).forEach((s) => s.remove());
+  // Remove any stale tooltip
+  const oldTip = host.querySelector(".training-dip-tooltip");
+  if (oldTip) oldTip.remove();
   host.appendChild(svg);
+
+  // --- Click handler for dip markers ---
+  svg.addEventListener("click", (e) => {
+    const dot = e.target.closest(".training-dip-dot");
+    // Remove any existing tooltip
+    const prev = host.querySelector(".training-dip-tooltip");
+    if (prev) prev.remove();
+    if (!dot) return;
+
+    const ep = dot.dataset.episode;
+    const drop = dot.dataset.drop;
+    const score = dot.dataset.score;
+    const rolling = dot.dataset.rolling;
+    let rubricHtml = "";
+    if (dot.dataset.rubrics) {
+      try {
+        const rubrics = JSON.parse(dot.dataset.rubrics);
+        rubricHtml = `<div class="dip-rubrics">`
+          + rubrics.map((r) => `<span class="dip-rubric">${r.r.replace("_", " ")}: <b>${r.s}</b></span>`).join("")
+          + `</div>`;
+      } catch { /* ignore */ }
+    }
+
+    const tip = document.createElement("div");
+    tip.className = "training-dip-tooltip";
+    tip.innerHTML = `
+      <div class="dip-tip-head">Episode ${ep} — dip ↓${drop}</div>
+      <div class="dip-tip-body">
+        <span>Raw score: <b>${score}</b></span>
+        <span>Rolling mean: <b>${rolling}</b></span>
+      </div>
+      ${rubricHtml}
+      <div class="dip-tip-hint">The agent explored a bad action or submitted a wrong cause this episode.</div>
+    `;
+    // Position near the dot
+    const svgRect = svg.getBoundingClientRect();
+    const dotX = parseFloat(dot.getAttribute("cx"));
+    const dotY = parseFloat(dot.getAttribute("cy"));
+    const pxX = (dotX / W) * svgRect.width;
+    const pxY = (dotY / H) * svgRect.height;
+    tip.style.left = `${Math.min(pxX + 12, svgRect.width - 220)}px`;
+    tip.style.top = `${Math.max(pxY - 60, 4)}px`;
+    host.appendChild(tip);
+
+    // Auto-dismiss after 5 seconds or on next click
+    setTimeout(() => tip.remove(), 5000);
+  });
 }
 
 function appendGridAndAxes(svg, pad, innerW, innerH, xMax, yMin, yMax) {

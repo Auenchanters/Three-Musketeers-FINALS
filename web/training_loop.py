@@ -599,12 +599,20 @@ def _run_episode_neural(
     service_index: dict[str, int],
     task_id: str,
     max_episode_steps: int,
+    epsilon: float = 0.0,
+    rng: random.Random | None = None,
 ) -> tuple[float, list[tuple[np.ndarray, int]]]:
     """One on-policy rollout for the neural policy.
 
     Maintains per-episode side-channels (action history bag, set of services
     queried) that feed back into the featurizer so the policy can condition on
     "what have I already done". This is the missing piece in the tabular path.
+
+    ``epsilon`` controls ε-greedy exploration: with probability ε the agent
+    picks a random action instead of sampling from the policy. This forces
+    more of the action space to be visited in early episodes, improving
+    convergence speed. Set to 0.0 (pure on-policy) after the exploration
+    phase ends.
     """
     env.reset(task_id=task_id)
     action_history: dict[str, int] = {}
@@ -615,7 +623,11 @@ def _run_episode_neural(
         f = _featurize(
             env, action_history, services_queried, service_index, max_episode_steps
         )
-        a_idx, _p = policy.sample(f)
+        # ε-greedy: explore randomly with probability epsilon
+        if epsilon > 0.0 and rng is not None and rng.random() < epsilon:
+            a_idx = rng.randrange(len(action_menu))
+        else:
+            a_idx, _p = policy.sample(f)
         action_dict = action_menu[a_idx]
 
         at = action_dict.get("action_type", "")
@@ -782,17 +794,61 @@ class LearningSession:
             STAGNATION_THRESHOLD = 50
             STAGNATION_TOLERANCE = 0.01
 
+            # --- Learning rate schedule ---
+            # Start at full lr for the first 100 episodes (exploration phase),
+            # then decay by 0.997× per episode. This lets the policy exploit
+            # aggressively early, then fine-tune past the plateau instead of
+            # oscillating around it.
+            LR_DECAY_START = 100
+            LR_DECAY_RATE = 0.997
+            initial_policy_lr = self.policy_lr
+            initial_value_lr = self.value_lr
+
+            # --- ε-greedy exploration schedule ---
+            # For the first 50 episodes, use ε=0.15 to force the policy to
+            # visit more of the action space (especially diverse action types
+            # like inspect_config/inspect_infra which improve investigation
+            # quality rubric). Decays linearly to 0 by episode 80.
+            EPSILON_START = 0.15
+            EPSILON_END_EP = 80
+
+            # --- Best-policy checkpointing ---
+            # Save the policy weights that produce the best rolling mean.
+            # If the policy degrades significantly (rolling drops >0.03 below
+            # peak), restore to the checkpoint. Prevents late-training
+            # collapses from dragging the final mean down.
+            best_rolling = 0.0
+            best_W_checkpoint: np.ndarray | None = None
+            best_wv_checkpoint: np.ndarray | None = None
+            CHECKPOINT_REVERT_GAP = 0.03
+
             for ep in range(1, self.n_episodes + 1):
+                # Compute current LR with decay schedule
+                if use_neural and ep > LR_DECAY_START:
+                    decay_factor = LR_DECAY_RATE ** (ep - LR_DECAY_START)
+                    current_policy_lr = max(initial_policy_lr * decay_factor, 0.05)
+                    current_value_lr = max(initial_value_lr * decay_factor, 0.01)
+                elif use_neural:
+                    current_policy_lr = self.policy_lr
+                    current_value_lr = self.value_lr
+
+                # Compute current epsilon for exploration
+                if ep <= EPSILON_END_EP:
+                    epsilon = EPSILON_START * max(0.0, 1.0 - ep / EPSILON_END_EP)
+                else:
+                    epsilon = 0.0
+
                 if use_neural:
                     score, traj_n = _run_episode_neural(
                         env, policy_n, menu, svc_index,
                         self.task_id, self.max_episode_steps,
+                        epsilon=epsilon, rng=rng,
                     )
                     policy_n.update(
                         traj_n,
                         terminal_return=score,
-                        lr_policy=self.policy_lr,
-                        lr_value=self.value_lr,
+                        lr_policy=current_policy_lr,
+                        lr_value=current_value_lr,
                         entropy_coef=self.entropy_coef,
                     )
                 else:
@@ -818,7 +874,30 @@ class LearningSession:
                 if score > best:
                     best = score
 
-                await self.push({
+                # --- Best-policy checkpointing ---
+                if use_neural and len(window) >= window_size:
+                    if rolling > best_rolling:
+                        best_rolling = rolling
+                        best_W_checkpoint = policy_n.W.copy()
+                        best_wv_checkpoint = policy_n.w_v.copy()
+                    elif (best_rolling - rolling) > CHECKPOINT_REVERT_GAP \
+                            and best_W_checkpoint is not None:
+                        # Policy degraded significantly — revert to best
+                        policy_n.W[:] = best_W_checkpoint
+                        policy_n.w_v[:] = best_wv_checkpoint
+                        # Bump entropy slightly to escape the collapse
+                        self.entropy_coef = min(self.entropy_coef * 1.5, 0.03)
+
+                # Build rubric snapshot for the metric event (optional,
+                # used by the frontend to explain score dips).
+                rubric_snap = None
+                if rb is not None:
+                    rubric_snap = [
+                        {"r": r.get("rubric", ""), "s": round(r.get("raw_score", 0), 3)}
+                        for r in rb
+                    ]
+
+                metric_event: dict[str, Any] = {
                     "type": "metric",
                     "episode": ep,
                     "score": round(score, 4),
@@ -826,7 +905,10 @@ class LearningSession:
                     "best": round(best, 4),
                     "lift_over_random": round(rolling - self.random_baseline, 4),
                     "elapsed_sec": round(time.time() - self.started_at, 2),
-                })
+                }
+                if rubric_snap is not None:
+                    metric_event["rubric_snapshot"] = rubric_snap
+                await self.push(metric_event)
 
                 # Adaptive reward boost: detect stagnation and bump
                 # learning rate + entropy to escape plateaus.
@@ -839,8 +921,8 @@ class LearningSession:
 
                     if stagnation_counter >= STAGNATION_THRESHOLD:
                         if use_neural:
-                            self.policy_lr = min(self.policy_lr * 1.5, 2.0)
-                            self.entropy_coef = min(self.entropy_coef * 2.0, 0.05)
+                            initial_policy_lr = min(initial_policy_lr * 1.3, 2.0)
+                            self.entropy_coef = min(self.entropy_coef * 1.5, 0.03)
                         else:
                             self.learning_rate = min(self.learning_rate * 1.5, 2.0)
                         stagnation_counter = 0
