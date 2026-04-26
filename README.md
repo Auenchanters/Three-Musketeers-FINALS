@@ -403,7 +403,7 @@ PostmortemEnv/
 | 🤗 **Live OpenEnv Space** (Docker) | <https://huggingface.co/spaces/Auenchanters/postmortemenv> |
 | 📓 **Training notebook** | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/Auenchanters/Three-Musketeers-FINALS/blob/main/train_notebook.ipynb) → [`train_notebook.ipynb`](train_notebook.ipynb) · [`train_notebook.py`](train_notebook.py) (script form, kept in lock-step with the .ipynb) · canonical CLI: [`train.py`](train.py) |
 | 📝 **Writeup / mini-blog** | [`blog_post.md`](blog_post.md) |
-| 📹 **Demo video (≤ 2 min)** | _Walkthrough recording is linked here on submission day. Until then, the live Space above **is** the demo — open it, click any task, and watch the live training chart converge in ~15 seconds._ |
+| 📹 **Demo video (≤ 2 min)** | [Insert YouTube Link Here] _(Walkthrough recording is linked here on submission day. Until then, the live Space above **is** the demo — open it, click any task, and watch the live training chart converge in ~15 seconds.)_ |
 | 📊 **Committed plots** | [`training_data/reward_curves.png`](training_data/reward_curves.png) (3-panel: overall · per-difficulty · cumulative reward per step) · [`training_data/agent_comparison.png`](training_data/agent_comparison.png) (single-panel — regenerate both with `python scripts/plot_agent_comparison.py`). The SFT loss curve is auto-generated to `training_data/loss_curve.png` after the first real GPU run via `python train.py plot-loss`. |
 | 🧪 **Frontier-model benchmark** | [`scripts/run_frontier_benchmark.py`](scripts/run_frontier_benchmark.py) — populates `training_data/frontier_results.json` after exporting `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` |
 
