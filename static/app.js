@@ -1128,7 +1128,7 @@ async function startTraining() {
     );
     return;
   }
-  const nEpisodes = clamp(parseInt(epsInput?.value, 10) || 500, 50, 1000);
+  const nEpisodes = clamp(parseInt(epsInput?.value, 10) || 500, 50, 600);
   if (epsInput) epsInput.value = String(nEpisodes);
 
   // Tear down any previous run.
