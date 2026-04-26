@@ -120,7 +120,7 @@ def _install(reqs_path: str) -> None:
     """
     uv_bin = shutil.which("uv")
     if uv_bin:
-        _run([uv_bin, "pip", "uninstall", "-q", "-y", "hf-transfer"])
+        _run([uv_bin, "pip", "uninstall", "-q", "hf-transfer"])
         _run([uv_bin, "pip", "install", "--python", sys.executable, "-q", "-r", reqs_path])
         return
     _run([sys.executable, "-m", "ensurepip", "--upgrade"])
