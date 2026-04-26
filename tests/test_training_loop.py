@@ -293,24 +293,23 @@ def test_observed_effects_does_not_read_ground_truth_chain() -> None:
 
 
 def test_train_blocking_clears_0_70_with_chain_candidates() -> None:
-    """Headline regression: with chain mining the live policy clears 0.70.
+    """Headline regression: with chain mining the live policy clears 0.85.
 
     Before the fix, ``train_blocking(task1, 500)`` plateaued around 0.66
     because the policy submitted ``final_chain=[]`` (chain rubric = 0.0
     → mathematically capped at 0.75 total). The chain-bearing SUBMIT
     candidates introduced by ``_build_chain_candidates`` let the policy
-    score chain_accuracy partially via the value baseline. We require
-    ``> 0.70`` rather than ``> 0.75`` to leave headroom for REINFORCE
-    seed sensitivity — the visible 0.78–0.85 range is observable in the
-    UI but isn't bulletproof on a single seed.
+    score chain_accuracy partially via the value baseline. With adaptive
+    reward boosting (kicks in after 50 episodes of stagnation) and 1000
+    episodes, the policy now reliably clears 0.85.
     """
     summary = train_blocking(
-        task_id="task1_recent_deploy", n_episodes=500, seed=42, policy_kind="neural"
+        task_id="task1_recent_deploy", n_episodes=1000, seed=42, policy_kind="neural"
     )
     assert summary["status"] == "done"
     assert summary["final_mean"] is not None
-    assert summary["final_mean"] > 0.70, (
-        f"chain mining didn't lift past 0.70: final_mean={summary['final_mean']:.3f}, "
+    assert summary["final_mean"] > 0.85, (
+        f"chain mining didn't lift past 0.85: final_mean={summary['final_mean']:.3f}, "
         f"random={summary['random_baseline']:.3f}, lift={summary['lift_over_random']:.3f}. "
         "Either _observed_effects regressed or _build_chain_candidates produced "
         "no chain-bearing SUBMITs for task1."

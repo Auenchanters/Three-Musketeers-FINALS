@@ -109,20 +109,7 @@ MODELS: list[ModelInfo] = [
         blurb="Code-tuned 7B. Best at structured action JSON + commit diffs. HF token required.",
         license="Apache-2.0",
     ),
-    # Smallest / cheapest. Featherless-ai-only, kept as a budget option.
-    ModelInfo(
-        id="qwen2.5-1.5b-instruct",
-        display_name="Qwen2.5 1.5B Instruct",
-        repo="Qwen/Qwen2.5-1.5B-Instruct",
-        params_b=1.5,
-        context_window=32_768,
-        tier="paid",
-        est_cost_usd=0.02,
-        blurb="Smallest, cheapest. Requires Featherless-ai enabled in HF settings. HF token required.",
-        license="Apache-2.0",
-        requires_provider="featherless-ai",
-    ),
-    # ---- Paid tier (> $1, bring your own HF token) -------------------------
+    # ---- Larger paid models (> $1, bring your own HF token) ----------------
     # 9 providers — the broadest reach in the registry. Replaces Llama-3.1-70B,
     # which is now scaleway-only (one-provider-deep is a common 400 trigger).
     ModelInfo(
