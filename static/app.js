@@ -728,6 +728,13 @@ function onCurriculum(ev) {
 
 function onDone(ev) {
   state.groundTruthCause = ev.cause;
+
+  // Always populate the cause and chain from the ground truth so the
+  // "Identified Root Cause" and "Sequence of Effects" panels are never blank.
+  if (ev.cause) state.cause = ev.cause;
+  if (ev.chain && ev.chain.length) state.chain = ev.chain;
+  renderCauseAndChain();
+
   const matched = state.cause && state.cause === ev.cause;
   if (matched) $("causeSlot").classList.add("matched");
   updateScore(ev.score, ev.steps);
