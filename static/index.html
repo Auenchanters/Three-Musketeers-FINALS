@@ -27,6 +27,21 @@
   </script>
 </head>
 <body>
+  <!--
+    Animated page background — purely decorative, sits behind everything via
+    position:fixed + z-index:-1, pointer-events:none so it never intercepts
+    clicks. Two layers: a scrolling grid pattern for light mode and a
+    "rolling drops" effect (3 vertical lines with falling white-gradient
+    drops on #171717) for dark mode, swapped via [data-theme] in style.css.
+  -->
+  <div class="page-bg" aria-hidden="true">
+    <div class="page-bg-lines">
+      <div class="page-bg-line"></div>
+      <div class="page-bg-line"></div>
+      <div class="page-bg-line"></div>
+    </div>
+  </div>
+
   <a class="skip-link" href="#main">Skip to main content</a>
 
   <header class="site-header" role="banner">

@@ -28,12 +28,17 @@ html {
   }
 }
 
+/* Theme bg lives on <html> so it acts as the always-present fallback if
+   the .page-bg animation fails (or while it's loading). <body> is then
+   transparent so the .page-bg fixed layer shows through. */
+html { background: var(--bg); }
+
 body {
   font-family: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   font-size: 15px;
   line-height: 1.55;
   color: var(--ink);
-  background: var(--bg);
+  background: transparent;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
@@ -1918,4 +1923,122 @@ kbd {
   margin-top: 6px;
   line-height: 1.4;
   font-style: italic;
+}
+
+/* =========================================================================
+   Animated page background
+   -------------------------------------------------------------------------
+   Sits on a fixed full-viewport layer behind everything (z-index:-1,
+   pointer-events:none). Purely decorative — never intercepts clicks,
+   never resizes content. The widgets keep their own opaque surface
+   colors so nothing changes about their readability.
+
+   Light mode: the original "Cool infinite background scrolling" pattern
+   (twitter @kootoopas, source: https://subtlepatterns.com/grid-me/) —
+   a 50x50 subtle grid PNG repeated and translated by (50,50) on a 0.92s
+   linear loop.
+
+   Dark mode: an adaptation of osorina's "CSS Background Effect"
+   (codepen.io/osorina/pen/PQdMOO) — three faint vertical lines on a
+   #171717 base, with a tall white-gradient "drop" cascading down each
+   line on a staggered 7s cubic-bezier loop.
+   ========================================================================= */
+
+.page-bg {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  overflow: hidden;
+  contain: strict;          /* keep paints scoped to the layer */
+}
+
+/* ---- Light mode: scrolling grid pattern ---- */
+[data-theme="light"] .page-bg {
+  background-color: var(--bg);
+  background-image: url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADIAAAAyCAIAAACRXR/mAAAACXBIWXMAAAsTAAALEwEAmpwYAAAAIGNIUk0AAHolAACAgwAA+f8AAIDpAAB1MAAA6mAAADqYAAAXb5JfxUYAAABnSURBVHja7M5RDYAwDEXRDgmvEocnlrQS2SwUFST9uEfBGWs9c97nbGtDcquqiKhOImLs/UpuzVzWEi1atGjRokWLFi1atGjRokWLFi1atGjRokWLFi1af7Ukz8xWp8z8AAAA//8DAJ4LoEAAlL1nAAAAAElFTkSuQmCC");
+  background-repeat: repeat;
+  background-position: 0 0;
+  /* The pattern is on a translucent grid, so we lower its perceived
+     contrast on the very-light --bg with a low opacity. */
+  opacity: 0.55;
+  animation: pme-bg-scrolling-reverse 0.92s linear infinite;
+}
+
+[data-theme="light"] .page-bg-lines { display: none; }
+
+@keyframes pme-bg-scrolling-reverse {
+  0%   { background-position: 0 0; }
+  100% { background-position: 50px 50px; }
+}
+
+/* ---- Dark mode: rolling drops ---- */
+[data-theme="dark"] .page-bg {
+  background: #171717;
+}
+
+[data-theme="dark"] .page-bg-lines {
+  position: absolute;
+  inset: 0;
+  margin: 0 auto;
+  width: 90vw;
+  height: 100%;
+}
+
+[data-theme="dark"] .page-bg-line {
+  position: absolute;
+  width: 1px;
+  height: 100%;
+  top: 0;
+  left: 50%;
+  background: rgba(255, 255, 255, 0.10);
+  overflow: hidden;
+}
+
+[data-theme="dark"] .page-bg-line::after {
+  content: "";
+  display: block;
+  position: absolute;
+  height: 15vh;
+  width: 100%;
+  top: -50%;
+  left: 0;
+  background: linear-gradient(
+    to bottom,
+    rgba(255, 255, 255, 0) 0%,
+    #ffffff 75%,
+    #ffffff 100%
+  );
+  animation: pme-bg-drop 7s 0s infinite;
+  animation-fill-mode: forwards;
+  animation-timing-function: cubic-bezier(0.4, 0.26, 0, 0.97);
+}
+
+[data-theme="dark"] .page-bg-line:nth-child(1) {
+  margin-left: -25%;
+}
+[data-theme="dark"] .page-bg-line:nth-child(1)::after {
+  animation-delay: 2s;
+}
+[data-theme="dark"] .page-bg-line:nth-child(3) {
+  margin-left: 25%;
+}
+[data-theme="dark"] .page-bg-line:nth-child(3)::after {
+  animation-delay: 2.5s;
+}
+
+@keyframes pme-bg-drop {
+  0%   { top: -50%; }
+  100% { top: 110%; }
+}
+
+/* Reduced motion: keep the layer static instead of snap-replaying.
+   The global reduced-motion rule already cuts animation-duration to
+   0.001ms; we additionally hide the bright drops so the dark theme
+   just shows the three faint vertical lines, and we anchor the light
+   pattern at its starting tile so it doesn't flicker. */
+@media (prefers-reduced-motion: reduce) {
+  .page-bg { animation: none !important; }
+  [data-theme="light"] .page-bg { background-position: 0 0; }
+  [data-theme="dark"] .page-bg-line::after { display: none; }
 }
