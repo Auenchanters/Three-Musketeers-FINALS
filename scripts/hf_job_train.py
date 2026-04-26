@@ -60,11 +60,9 @@ except Exception:
 # Switch HF Hub to the high-throughput Rust transfer client. Cuts a fresh
 # 7B model download (~15 GB) from ~12 min to ~2-3 min on an L4 container.
 # DEFAULT: OFF. We've seen the Rust binary panic silently inside a uv-built
-# Python 3.12 container ("Set HF_DEBUG=1 ..." with no further output and the
-# job effectively hanging at the first download). The standard Python
-# downloader is slower (~12 min for 7B) but observable. Set
-# HF_HUB_ENABLE_HF_TRANSFER=1 in the job env to opt back in.
-os.environ.setdefault("HF_HUB_ENABLE_HF_TRANSFER", "0")
+# Python 3.12 container. HF Jobs runner silently installs it, so we aggressively
+# override it here.
+os.environ["HF_HUB_ENABLE_HF_TRANSFER"] = "0"
 # Make sure transformers / accelerate / TRL print their own logs at INFO so
 # the SFT phase is visible while it runs (dataset prep, token counts, ...).
 os.environ.setdefault("TRANSFORMERS_VERBOSITY", "info")
@@ -122,9 +120,11 @@ def _install(reqs_path: str) -> None:
     """
     uv_bin = shutil.which("uv")
     if uv_bin:
+        _run([uv_bin, "pip", "uninstall", "-q", "-y", "hf-transfer"])
         _run([uv_bin, "pip", "install", "--python", sys.executable, "-q", "-r", reqs_path])
         return
     _run([sys.executable, "-m", "ensurepip", "--upgrade"])
+    _run([sys.executable, "-m", "pip", "uninstall", "-q", "-y", "hf-transfer"])
     _run([sys.executable, "-m", "pip", "install", "-q", "-r", reqs_path])
 
 
