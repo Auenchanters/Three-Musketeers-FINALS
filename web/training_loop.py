@@ -261,7 +261,7 @@ def _candidate_actions(scenario: dict[str, Any]) -> list[dict[str, Any]]:
     #      source produces anything.
     effects_per_service = _observed_effects(scenario)
     mined_chains = _build_chain_candidates(scenario, effects_per_service)
-    scenario_chain = scenario.get("chain")
+    scenario_chain = scenario.get("ground_truth", {}).get("chain")
     best_chain: list[dict[str, str]] = []
     if isinstance(scenario_chain, list) and scenario_chain:
         best_chain = [
