@@ -1,7 +1,7 @@
 # PostmortemEnv: Teaching LLMs to Investigate, Not Just Control
 
 **Theme 3.1: World Modeling (Professional) | Meta PyTorch OpenEnv Hackathon Apr '26**
-**Team: Three Musketeers (Utkarsh, Mohit, Tanush) | Scaler AI Labs Sub-Prize**
+**Team: Three Musketeers (L Mohit Jain, Tanush Deepak, Utkarsh Singh Yadav - First Year Students) | Scaler AI Labs Sub-Prize**
 
 > 🔗 **Try the live demo:** <https://huggingface.co/spaces/Auenchanters/postmortemenv> — choose a task, hit *Run Oracle*, watch the agent investigate. No API key required.
 

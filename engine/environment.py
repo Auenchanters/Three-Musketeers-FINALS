@@ -167,7 +167,7 @@ class PostmortemEnvironment(Environment[Action, Observation, EnvironmentState]):
                 "telemetry and must identify the root cause and causal chain."
             ),
             version="1.0.0",
-            author="Three Musketeers (Utkarsh, Mohit, Tanush)",
+            author="Three Musketeers (L Mohit Jain, Tanush Deepak, Utkarsh Singh Yadav - First Year Students)",
         )
 
     # --- reset ---

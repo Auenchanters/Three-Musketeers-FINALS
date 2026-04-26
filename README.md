@@ -25,7 +25,7 @@ tags:
 # PostmortemEnv
 
 > *Theme 3.1 — World Modeling (Professional). Meta PyTorch OpenEnv Hackathon, April 2026.*
-> *By Three Musketeers — Utkarsh, Mohit, Tanush.*
+> *By Three Musketeers — L Mohit Jain, Tanush Deepak, Utkarsh Singh Yadav (First Year Students).*
 
 ## It is 02:47 AM.
 
@@ -409,4 +409,4 @@ PostmortemEnv/
 
 ---
 
-*Built for the Meta PyTorch OpenEnv Hackathon, April 2026 — by Three Musketeers (Utkarsh, Mohit, Tanush). MIT-licensed.*
+*Built for the Meta PyTorch OpenEnv Hackathon, April 2026 — by Three Musketeers (L Mohit Jain, Tanush Deepak, Utkarsh Singh Yadav - First Year Students). MIT-licensed.*

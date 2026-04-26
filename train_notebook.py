@@ -4,7 +4,7 @@
 # Run in Google Colab with a T4 GPU for best results.
 #
 # Meta PyTorch OpenEnv Hackathon Apr '26
-# Team: Three Musketeers (Utkarsh, Mohit, Tanush)
+# Team: Three Musketeers (L Mohit Jain, Tanush Deepak, Utkarsh Singh Yadav - First Year Students)
 #
 # Pipeline:
 #   1. Install deps
