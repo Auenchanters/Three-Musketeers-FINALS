@@ -116,8 +116,9 @@
             ></ul>
           </div>
           <p class="field-help" id="modelHelp">
-            Free-tier models run on PostmortemEnv's HuggingFace credits. Models over $1
-            per run require your own HF token.
+            All models require your own HF token. Get one from
+            <a href="https://huggingface.co/settings/tokens" target="_blank">huggingface.co/settings/tokens</a>
+            with <code>Inference</code> permission.
           </p>
         </div>
 
@@ -186,8 +187,12 @@
 
         <!-- Free-tier disabled banner (server has no HF_TOKEN) -------- -->
         <div class="banner banner-warn" id="freeTierBanner" hidden role="alert">
-          <strong>Free tier disabled on this deployment.</strong>
-          The server has no <code>HF_TOKEN</code> configured. Pick a paid model and bring your own HF token, or run the local Oracle / Random investigator from the
+          <strong>All models require an HF token.</strong>
+          Paste a HuggingFace token from
+          <a href="https://huggingface.co/settings/tokens" target="_blank" rel="noopener">
+            huggingface.co/settings/tokens
+          </a>
+          with <code>Inference</code> permission, or run the local Oracle / Random investigator from the
           <a href="/docs" target="_blank" rel="noopener">API</a>.
         </div>
 

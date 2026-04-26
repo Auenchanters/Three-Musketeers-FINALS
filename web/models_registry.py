@@ -3,9 +3,11 @@ Curated model registry for the live UI.
 
 Single source of truth for the dropdown the judges use to pick a model.
 Each entry records the HF repo path, parameter count, context window, tier
-("free" → run on the server's HF token; "paid" → require a user-supplied
-HF token), and an estimated USD cost per run (5K input + 2K output tokens
-at HuggingFace Inference pricing as of 2026-04).
+and an estimated USD cost per run (5K input + 2K output tokens at
+HuggingFace Inference pricing as of 2026-04).
+
+All models are paid-tier — users must supply their own HF token with
+Inference permission from huggingface.co/settings/tokens.
 
 Costs are estimates only — display them with a "~" prefix in the UI and
 explain that real cost depends on traffic and prompt size.
@@ -57,7 +59,7 @@ class ModelInfo:
 # without the user having to manually enable a niche provider in their HF
 # account settings (https://huggingface.co/settings/inference-providers).
 MODELS: list[ModelInfo] = [
-    # ---- Free tier (≤ $1, server's HF token) -------------------------------
+    # ---- All models require a user-supplied HF token -----------------------
     # Default. Live on 5 providers — Cerebras + Novita are typically enabled
     # by default on fresh HF accounts, so this is the safest first-run pick.
     ModelInfo(
@@ -66,9 +68,9 @@ MODELS: list[ModelInfo] = [
         repo="meta-llama/Llama-3.1-8B-Instruct",
         params_b=8.0,
         context_window=131_072,
-        tier="free",
+        tier="paid",
         est_cost_usd=0.06,
-        blurb="Meta's reliable 8B reasoner. Live on 5 providers — broadest free reach.",
+        blurb="Meta's reliable 8B reasoner. Live on 5 providers — bring your own HF token.",
         license="Llama 3.1 Community",
     ),
     # Live on Together (almost always default-enabled) + Featherless.
@@ -78,9 +80,9 @@ MODELS: list[ModelInfo] = [
         repo="Qwen/Qwen2.5-7B-Instruct",
         params_b=7.0,
         context_window=131_072,
-        tier="free",
+        tier="paid",
         est_cost_usd=0.15,
-        blurb="The strongest free pick. Reliable JSON, good investigation depth.",
+        blurb="Strongest small model. Reliable JSON, good investigation depth. HF token required.",
         license="Apache-2.0",
     ),
     # Newer Qwen3 line — live on nscale + fireworks-ai + featherless-ai.
@@ -90,9 +92,9 @@ MODELS: list[ModelInfo] = [
         repo="Qwen/Qwen3-8B",
         params_b=8.0,
         context_window=131_072,
-        tier="free",
+        tier="paid",
         est_cost_usd=0.10,
-        blurb="Qwen's 2026 reasoning-tuned line. Strong CoT, JSON-clean.",
+        blurb="Qwen's 2026 reasoning-tuned line. Strong CoT, JSON-clean. HF token required.",
         license="Apache-2.0",
     ),
     # Code-tuned 7B on nscale + featherless-ai.
@@ -102,9 +104,9 @@ MODELS: list[ModelInfo] = [
         repo="Qwen/Qwen2.5-Coder-7B-Instruct",
         params_b=7.0,
         context_window=131_072,
-        tier="free",
+        tier="paid",
         est_cost_usd=0.12,
-        blurb="Code-tuned 7B. Best at structured action JSON + commit diffs.",
+        blurb="Code-tuned 7B. Best at structured action JSON + commit diffs. HF token required.",
         license="Apache-2.0",
     ),
     # Smallest / cheapest. Featherless-ai-only, kept as a budget option.
@@ -114,9 +116,9 @@ MODELS: list[ModelInfo] = [
         repo="Qwen/Qwen2.5-1.5B-Instruct",
         params_b=1.5,
         context_window=32_768,
-        tier="free",
+        tier="paid",
         est_cost_usd=0.02,
-        blurb="Smallest, cheapest. Requires Featherless-ai enabled in HF settings.",
+        blurb="Smallest, cheapest. Requires Featherless-ai enabled in HF settings. HF token required.",
         license="Apache-2.0",
         requires_provider="featherless-ai",
     ),
