@@ -917,6 +917,13 @@ function renderGraph(graph) {
     label.textContent = svc;
     g.appendChild(label);
 
+    const dot = document.createElementNS(svgNS, "circle");
+    dot.setAttribute("cx", pos.x + nodeW/2 - 6);
+    dot.setAttribute("cy", pos.y - nodeH/2 + 6);
+    dot.setAttribute("r", "3");
+    dot.classList.add("outage-dot");
+    g.appendChild(dot);
+
     svg.appendChild(g);
   }
 
