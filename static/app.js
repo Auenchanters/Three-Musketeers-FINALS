@@ -182,6 +182,13 @@ function renderModelListbox() {
       const chip = m.tier === "free"
         ? `<span class="chip chip-free">Free · ~$${m.est_cost_usd.toFixed(2)}</span>`
         : `<span class="chip chip-paid">~$${m.est_cost_usd.toFixed(2)} / run</span>`;
+      // Surface the requires_provider flag so the user knows up-front that
+      // this model only routes through one specific HF Inference Provider
+      // (e.g. Featherless-ai). Without this badge they only learn it after
+      // a 400 from the router with model_not_supported.
+      const providerBadge = m.requires_provider
+        ? `<span class="chip chip-warn" title="Enable ${escapeHtml(m.requires_provider)} at huggingface.co/settings/inference-providers">Needs ${escapeHtml(m.requires_provider)}</span>`
+        : "";
 
       li.innerHTML = `
         <span class="model-logo" aria-hidden="true">🤗</span>
@@ -190,7 +197,7 @@ function renderModelListbox() {
           <span class="model-meta">${m.params_b}B · ${formatCtx(m.context_window)} ctx · ${escapeHtml(m.license)}</span>
         </span>
         <span class="model-blurb">${escapeHtml(m.blurb)}</span>
-        <span class="model-chip-cell">${chip}</span>
+        <span class="model-chip-cell">${chip}${providerBadge}</span>
       `;
       li.addEventListener("click", () => {
         if (li.getAttribute("aria-disabled") === "true") return;
@@ -337,6 +344,20 @@ function applyModelSelection(modelId) {
     $("credCard").hidden = false;
     $("credCardTitle").textContent = "HF token required (server has no free tier)";
     $("freeTierNote").hidden = true;
+  }
+
+  // Provider-specific banner for free models that only route through one
+  // HF Inference Provider. Failing to enable that provider is the most
+  // common reason a "free" model still 400s for a fresh HF account.
+  const note = $("providerRequirementNote");
+  if (note) {
+    if (m.requires_provider) {
+      note.hidden = false;
+      note.innerHTML = `Heads up: <strong>${escapeHtml(m.display_name)}</strong> only routes through <strong>${escapeHtml(m.requires_provider)}</strong>. Enable it at <a href="https://huggingface.co/settings/inference-providers" target="_blank" rel="noopener">huggingface.co/settings/inference-providers</a> first, otherwise the run will 400 with <code>model_not_supported</code>.`;
+    } else {
+      note.hidden = true;
+      note.textContent = "";
+    }
   }
 }
 

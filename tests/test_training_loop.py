@@ -30,9 +30,11 @@ from web.training_loop import (
     FEATURE_DIM,
     LearningSession,
     _NeuralPolicy,
+    _build_chain_candidates,
     _candidate_actions,
     _estimate_random_baseline,
     _featurize,
+    _observed_effects,
     _service_index_table,
     train_blocking,
 )
@@ -197,9 +199,11 @@ def test_done_event_carries_per_rubric_breakdown() -> None:
     """The frontend reads rubric_breakdown to show *why* the score is what it is.
 
     The breakdown is the average over the final 20-ep window of each of the
-    five rubrics (cause/chain/efficiency/investigation/anti_gaming). For a
-    non-NLP policy the chain_accuracy raw score should be ~0.0 (we always
-    submit final_chain=[]) — that's the documented ceiling explanation.
+    five rubrics (cause/chain/efficiency/investigation/anti_gaming). With
+    chain mining enabled in ``_candidate_actions``, the chain_accuracy raw
+    score can now be > 0 once the policy learns to prefer chain-bearing
+    SUBMITs — the assertion below only requires it to be a valid number in
+    [0, 1].
     """
     sess = LearningSession(
         session_id="rb",
@@ -236,3 +240,108 @@ def test_env_exposes_final_rubric_breakdown_after_submit() -> None:
     env.step(Action(action_type=ActionType.SUBMIT, final_cause="commit-a1b2c3", final_chain=[]))
     rb = env.get_final_rubric_breakdown()
     assert rb is not None and isinstance(rb, list) and len(rb) == 5
+
+
+# --- Chain-mining regression suite ---------------------------------------
+#
+# These tests guard the fix that lets the live policy actually score
+# ``chain_accuracy`` (25% of the total rubric weight). Before the fix the
+# action menu hard-coded ``final_chain=[]`` for every SUBMIT candidate, so
+# the maximum reachable score was 0.75 by construction and the live chart
+# plateaued around 0.66. The fix mines (service, effect) pairs from the
+# public log haystack — the same logs the agent reads via QUERY_LOGS — and
+# uses them to populate chain-bearing SUBMITs in the action menu.
+
+
+def test_observed_effects_extracts_known_chain_strings() -> None:
+    """The hand-crafted task1 scenario's logs name the GT chain effects.
+
+    Specifically: 'data' logs say "Connection pool ... exhausted", 'auth'
+    logs say "504 Gateway Timeout" / "upstream", 'frontend' logs say "5xx"
+    or "503 ... returned to client". The mined dict must contain those
+    canonical effect strings on the matching service.
+    """
+    scenario = load_scenario("task1_recent_deploy")
+    effects = _observed_effects(scenario)
+    assert "connection_pool_exhaustion" in effects.get("data", []) or \
+           "connection_pool_exhaustion" in effects.get("auth", []), \
+        f"connection_pool_exhaustion not surfaced anywhere: {effects}"
+    assert "upstream_timeout" in effects.get("auth", []) or \
+           "upstream_timeout" in effects.get("frontend", []), \
+        f"upstream_timeout not surfaced anywhere: {effects}"
+    # frontend should pick up 5xx/503 messaging
+    fe = effects.get("frontend", [])
+    assert "5xx_errors_to_users" in fe, f"expected 5xx in frontend, got {fe}"
+
+
+def test_observed_effects_does_not_read_ground_truth_chain() -> None:
+    """Helper must work on a scenario dict with no ``chain`` field at all.
+
+    The ``chain`` field is GT and must never leak into the policy's input.
+    Stripping it from a clone of the scenario should not affect the mined
+    effect set in any way.
+    """
+    scenario = load_scenario("task1_recent_deploy")
+    stripped = {k: v for k, v in scenario.items() if k != "chain"}
+    assert "chain" not in stripped
+    full_effects = _observed_effects(scenario)
+    stripped_effects = _observed_effects(stripped)
+    assert full_effects == stripped_effects, (
+        "observed_effects depends on scenario['chain'] — that's the GT. "
+        f"full={full_effects} stripped={stripped_effects}"
+    )
+
+
+def test_train_blocking_clears_0_70_with_chain_candidates() -> None:
+    """Headline regression: with chain mining the live policy clears 0.70.
+
+    Before the fix, ``train_blocking(task1, 500)`` plateaued around 0.66
+    because the policy submitted ``final_chain=[]`` (chain rubric = 0.0
+    → mathematically capped at 0.75 total). The chain-bearing SUBMIT
+    candidates introduced by ``_build_chain_candidates`` let the policy
+    score chain_accuracy partially via the value baseline. We require
+    ``> 0.70`` rather than ``> 0.75`` to leave headroom for REINFORCE
+    seed sensitivity — the visible 0.78–0.85 range is observable in the
+    UI but isn't bulletproof on a single seed.
+    """
+    summary = train_blocking(
+        task_id="task1_recent_deploy", n_episodes=500, seed=42, policy_kind="neural"
+    )
+    assert summary["status"] == "done"
+    assert summary["final_mean"] is not None
+    assert summary["final_mean"] > 0.70, (
+        f"chain mining didn't lift past 0.70: final_mean={summary['final_mean']:.3f}, "
+        f"random={summary['random_baseline']:.3f}, lift={summary['lift_over_random']:.3f}. "
+        "Either _observed_effects regressed or _build_chain_candidates produced "
+        "no chain-bearing SUBMITs for task1."
+    )
+
+
+def test_action_menu_stays_under_200_on_largest_task() -> None:
+    """task4 is the 12-node failover scenario; chain candidates × cause
+    candidates can multiply quickly. Cap the menu so 500-episode REINFORCE
+    still has every action sampled enough times to learn.
+    """
+    scenario = load_scenario("task4_multi_region_failover")
+    menu = _candidate_actions(scenario)
+    assert 0 < len(menu) < 200, (
+        f"action menu blew up to {len(menu)} on task4 — chain candidates × cause "
+        "candidates is too aggressive. Tighten CHAIN_K or per-service effect cap."
+    )
+
+
+def test_build_chain_candidates_returns_2_to_3_node_chains() -> None:
+    """Chain shapes should match seed_generator's typical 3-node templates.
+
+    Empty input → empty output (graceful on scenarios with no log signal).
+    Otherwise every chain has 1-3 nodes (we lead with a single failing
+    service, then append up to 2 dependents).
+    """
+    assert _build_chain_candidates({}, {}) == []
+    scenario = load_scenario("task1_recent_deploy")
+    chains = _build_chain_candidates(scenario, _observed_effects(scenario))
+    assert chains, "expected at least one chain candidate for task1"
+    for c in chains:
+        assert 1 <= len(c) <= 3, f"chain length out of range: {c}"
+        for node in c:
+            assert "service" in node and "effect" in node

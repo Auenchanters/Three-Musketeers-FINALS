@@ -31,6 +31,13 @@ class ModelInfo:
     est_cost_usd: float
     blurb: str
     license: str
+    # Optional: a single HF Inference Provider this model is *only* served
+    # by, e.g. ``"featherless-ai"``. The frontend uses this to warn the
+    # user up-front that they need to enable that provider in their HF
+    # account settings before clicking Run — otherwise the request 400s
+    # with ``model_not_supported`` from the router. ``None`` for models
+    # served by ≥2 providers (the safe default case).
+    requires_provider: str | None = None
 
     def public_dict(self) -> dict:
         return asdict(self)
@@ -111,6 +118,7 @@ MODELS: list[ModelInfo] = [
         est_cost_usd=0.02,
         blurb="Smallest, cheapest. Requires Featherless-ai enabled in HF settings.",
         license="Apache-2.0",
+        requires_provider="featherless-ai",
     ),
     # ---- Paid tier (> $1, bring your own HF token) -------------------------
     # 9 providers — the broadest reach in the registry. Replaces Llama-3.1-70B,

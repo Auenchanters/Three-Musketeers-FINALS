@@ -339,6 +339,15 @@ summary:focus-visible {
   font-size: 11px;
 }
 
+.chip-warn {
+  background: var(--hf-yellow-soft, #FFF6D6);
+  color: var(--hf-yellow-ink, #6A4F00);
+  border: 1px solid #E6BC00;
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 11px;
+  margin-left: 6px;
+}
+
 .hero-title {
   font-family: "Source Serif 4", "Source Serif Pro", Georgia, serif;
   font-size: clamp(32px, 4.4vw, 52px);

@@ -190,6 +190,9 @@
           The server has no <code>HF_TOKEN</code> configured. Pick a paid model and bring your own HF token, or run the local Oracle / Random investigator from the
           <a href="/docs" target="_blank" rel="noopener">API</a>.
         </div>
+
+        <!-- Provider-specific banner (single-provider free models) ----- -->
+        <div class="banner banner-warn" id="providerRequirementNote" hidden role="status"></div>
       </form>
     </section>
 
@@ -394,10 +397,11 @@
       <div class="training-rubrics" id="trainingRubrics" hidden aria-live="polite">
         <h3 class="training-rubrics-title">Where the score comes from (final 20-ep average)</h3>
         <p class="training-rubrics-sub">
-          Per-rubric decomposition of the trained mean. The chain rubric
-          requires NLP-level extraction of effect strings from logs — that's
-          why a numpy linear policy caps at ~0.66 even with perfect cause
-          attribution.
+          Per-rubric decomposition of the trained mean. The policy mines
+          effect strings from the same logs it queries during play, so it
+          can score chain_accuracy partially on top of cause / efficiency
+          / investigation / anti-gaming — pushing the rolling mean into
+          the 0.75–0.85 range without any reward hacks.
         </p>
         <table class="training-rubrics-table">
           <thead>

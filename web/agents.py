@@ -728,9 +728,32 @@ class HFInferenceAgent:
                     body=resp.text,
                     repo=self.repo,
                 )
-            data = resp.json()
+            # A 200 carrying HTML or plain text (Cloudflare error page,
+            # provider misconfig) decodes as a JSON parse failure. Surface
+            # it through HFInferenceError so the SSE error event gets a
+            # typed hint instead of a bare JSONDecodeError landing in the
+            # generic Exception branch.
+            try:
+                data = resp.json()
+            except ValueError as exc:
+                raise HFInferenceError(
+                    status=resp.status_code,
+                    body=f"non-json response: {resp.text[:300]}",
+                    repo=self.repo,
+                ) from exc
 
-        text = data["choices"][0]["message"]["content"]
+        # Provider can return a 200 with a valid JSON body that doesn't
+        # follow the OpenAI chat-completions shape (e.g. an error envelope).
+        # Convert that to HFInferenceError too so the UI surfaces a hint
+        # instead of a KeyError/IndexError stack trace.
+        choices = data.get("choices") or []
+        if not choices or "message" not in choices[0]:
+            raise HFInferenceError(
+                status=200,
+                body=f"provider returned no choices: {json.dumps(data)[:300]}",
+                repo=self.repo,
+            )
+        text = choices[0]["message"].get("content", "") or ""
         usage = data.get("usage", {})
         return text.strip(), {
             "input_tokens": int(usage.get("prompt_tokens", 0)),
@@ -759,6 +782,19 @@ class HFInferenceError(Exception):
 
     def _hint(self) -> str:
         body_lower = self.body.lower()
+        if "non-json response" in body_lower:
+            return (
+                "Provider returned a non-JSON body (often a Cloudflare "
+                "error page or provider gateway issue). Try again, or "
+                "switch to a different model."
+            )
+        if "provider returned no choices" in body_lower:
+            return (
+                "Provider returned a JSON body without the expected "
+                "choices[0].message shape. The model is up but rejected "
+                "this request — try a different model, or shorten the "
+                "prompt if it's near the context limit."
+            )
         if self.status == 401 or "invalid username or password" in body_lower:
             return (
                 "Token is invalid or has no Inference Providers permission. "
